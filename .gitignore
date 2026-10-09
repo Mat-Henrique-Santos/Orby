@@ -1,0 +1,32 @@
+# Ambientes virtuais
+.venv/
+orby_env/
+env/
+venv/
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Compilação e executáveis PyInstaller
+build/
+dist/
+*.exe
+*.spec.bak
+
+# Banco de dados local e temporários
+*.db
+*.sqlite3
+temp_test.db
+extracted_orby_projeto2.txt
+AGENTS.md
+
+# Configurações de IDEs e editores
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+.DS_Store
+Thumbs.db

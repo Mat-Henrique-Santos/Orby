@@ -1,0 +1,9 @@
+Nome,Telefone,E-mail
+Ana Souza,11987654321,ana.souza@example.com
+Bruno Lima,21976543210,bruno.lima@example.com
+Carla Mendes,31965432109,carla.mendes@example.com
+Diego Alves,41954321098,diego.alves@example.com
+Ana Souza,11987654321,ana.duplicada@example.com
+,11943210987,sem.nome@example.com
+Fernanda Rocha,,fernanda.rocha@example.com
+Gabriel Santos,51932109876,
