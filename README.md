@@ -22,7 +22,7 @@ Sistema desktop intuitivo e de alta performance voltado para pequenas empresas, 
 - **Dashboard e Métricas:**
   - Indicadores operacionais e controle de faturamento em tempo real.
 - **Design & Usabilidade:**
-  - Interface com tema Claro e Escuro (Frutiger Aero).
+  - Interface com tema Claro e Escuro.
   - Ícones vetoriais modernos e inicialização em menos de 3 segundos.
 
 ---
