@@ -1,6 +1,20 @@
 import hashlib
+import os
 import sqlite3
 from pathlib import Path
+
+
+def get_default_db_path() -> str:
+    """Retorna o caminho padrão do banco de dados na pasta AppData/Application Support/Home do usuário."""
+    appdata = os.getenv("APPDATA")
+    if appdata:
+        data_dir = Path(appdata) / "Orby"
+    else:
+        # Fallback cross-platform (Linux/macOS)
+        data_dir = Path.home() / ".orby"
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return str(data_dir / "orby.db")
 
 
 def hash_password(password: str) -> str:
@@ -14,7 +28,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 class Database:
     def __init__(self, path: str | None = None) -> None:
-        self.path = path or str(Path.cwd() / "orby.db")
+        self.path = path or get_default_db_path()
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path)

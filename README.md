@@ -75,7 +75,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-> **Nota:** O banco de dados SQLite (`orby.db`) é criado e populado automaticamente na primeira execução com os usuários e estrutura inicial.
+> **Nota:** O banco de dados SQLite (`orby.db`) é criado e populado automaticamente na primeira execução dentro do diretório de dados do usuário (`%APPDATA%/Orby/orby.db` no Windows ou `~/.orby/` no Linux/macOS), mantendo seus arquivos e pastas organizados.
 
 ---
 
