@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 
 from .core.models import FORMA_PAGAMENTO_OPCOES, StatusOS
 from .importer import read_table, validate_customers
-from .repository import Repository
+from .repository import PermissionDeniedError, Repository
 from .ui.components import (
     ContentCard,
     MetricCard,
@@ -142,6 +142,13 @@ class OrderDialog(QDialog):
 
         self.status = QComboBox()
         self.status.addItems(StatusOS.all_values())
+        if is_atendente:
+            if order:
+                self.status.setEnabled(False)
+            else:
+                self.status.clear()
+                self.status.addItem(StatusOS.ABERTA.value)
+                self.status.setEnabled(False)
 
         # Discriminação de Valores Financeiros
         self.valor_servico = QDoubleSpinBox()
@@ -164,10 +171,17 @@ class OrderDialog(QDialog):
         self.value.setDecimals(2)
         self.value.setValue(float(order["valor"]) if order else 0.0)
 
+        if is_atendente:
+            self.valor_servico.setReadOnly(True)
+            self.valor_pecas.setReadOnly(True)
+            self.value.setReadOnly(True)
+
         self.forma_pagamento = QComboBox()
         self.forma_pagamento.addItems(FORMA_PAGAMENTO_OPCOES)
         if order and order.get("forma_pagamento"):
             self.forma_pagamento.setCurrentText(order["forma_pagamento"])
+        if is_atendente:
+            self.forma_pagamento.setEnabled(False)
 
         self.notes = QTextEdit(order.get("observacoes") or "" if order else "")
         self.notes.setPlaceholderText("Observações internas / prazos acordados...")
@@ -471,9 +485,9 @@ class ImportDialog(QDialog):
 class MainWindow(QMainWindow):
     def __init__(self, database, current_user: dict | None = None):
         super().__init__()
-        self.repository = Repository(database)
         self.current_user = current_user or {"id": 1, "nome": "Administrador", "perfil": "Gestor"}
         self.perfil = self.current_user.get("perfil", "Gestor")
+        self.repository = Repository(database, current_user=self.current_user)
         self.requested_logout = False
 
         self.setWindowTitle("Orby — Gestão Operacional para Pequenas Empresas e Serviços")
@@ -1073,6 +1087,7 @@ class MainWindow(QMainWindow):
         data = self.repository.dashboard()
         self.card_abertas.set_value(str(data.get("abertas") or 0))
         self.card_reparo.set_value(str(data.get("em_reparo") or 0))
+        self.card_finalizadas.set_value(str(data.get("finalizadas") or 0))
         if self.perfil != "Gestor":
             self.card_faturamento.set_value("Restrito")
         else:
@@ -1089,7 +1104,8 @@ class MainWindow(QMainWindow):
             self.dash_table.setItem(row, 2, QTableWidgetItem(item["equipamento_nome"]))
             badge = StatusBadge(item["status"])
             self.dash_table.setCellWidget(row, 3, badge)
-            self.dash_table.setItem(row, 4, QTableWidgetItem(f"R$ {item['valor']:.2f}"))
+            valor_texto = "Restrito" if self.perfil == "Técnico" else f"R$ {item['valor']:.2f}"
+            self.dash_table.setItem(row, 4, QTableWidgetItem(valor_texto))
             self.dash_table.setItem(row, 5, QTableWidgetItem(item["data_abertura"][:10]))
 
     def refresh_finance(self) -> None:
@@ -1153,9 +1169,14 @@ class MainWindow(QMainWindow):
             self.order_table.setItem(row, 3, QTableWidgetItem(item["descricao"]))
             badge = StatusBadge(item["status"])
             self.order_table.setCellWidget(row, 4, badge)
-            self.order_table.setItem(row, 5, QTableWidgetItem(f"R$ {item.get('valor_servico') or 0.0:.2f}"))
-            self.order_table.setItem(row, 6, QTableWidgetItem(f"R$ {item.get('valor_pecas') or 0.0:.2f}"))
-            self.order_table.setItem(row, 7, QTableWidgetItem(f"R$ {item['valor']:.2f}"))
+            if self.perfil == "Técnico":
+                self.order_table.setItem(row, 5, QTableWidgetItem("Restrito"))
+                self.order_table.setItem(row, 6, QTableWidgetItem("Restrito"))
+                self.order_table.setItem(row, 7, QTableWidgetItem("Restrito"))
+            else:
+                self.order_table.setItem(row, 5, QTableWidgetItem(f"R$ {item.get('valor_servico') or 0.0:.2f}"))
+                self.order_table.setItem(row, 6, QTableWidgetItem(f"R$ {item.get('valor_pecas') or 0.0:.2f}"))
+                self.order_table.setItem(row, 7, QTableWidgetItem(f"R$ {item['valor']:.2f}"))
 
     def refresh_equipment(self) -> None:
         rows = self.repository.equipment()
@@ -1208,9 +1229,12 @@ class MainWindow(QMainWindow):
             return
         if QMessageBox.question(self, "Confirmar Exclusão", "Deseja realmente excluir o cliente selecionado?") != QMessageBox.Yes:
             return
-        ok, message = self.repository.delete_customer(item_id)
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "Clientes", message)
-        self.refresh_all()
+        try:
+            ok, message = self.repository.delete_customer(item_id)
+            (QMessageBox.information if ok else QMessageBox.warning)(self, "Clientes", message)
+            self.refresh_all()
+        except PermissionDeniedError as error:
+            QMessageBox.critical(self, "Acesso Negado", str(error))
 
     def import_customers(self) -> None:
         if ImportDialog(self, self.repository).exec():
@@ -1226,6 +1250,8 @@ class MainWindow(QMainWindow):
             try:
                 self.repository.add_equipment(*dialog.values())
                 self.refresh_all()
+            except PermissionDeniedError as error:
+                QMessageBox.critical(self, "Acesso Negado", str(error))
             except ValueError as error:
                 QMessageBox.warning(self, "Equipamento Inválido", str(error))
 
@@ -1239,9 +1265,12 @@ class MainWindow(QMainWindow):
             "Deseja realmente excluir o equipamento selecionado?",
         ) != QMessageBox.Yes:
             return
-        ok, message = self.repository.delete_equipment(item_id)
-        (QMessageBox.information if ok else QMessageBox.warning)(self, "Equipamentos", message)
-        self.refresh_all()
+        try:
+            ok, message = self.repository.delete_equipment(item_id)
+            (QMessageBox.information if ok else QMessageBox.warning)(self, "Equipamentos", message)
+            self.refresh_all()
+        except PermissionDeniedError as error:
+            QMessageBox.critical(self, "Acesso Negado", str(error))
 
     def add_order(self) -> None:
         customers = self.repository.customers()
@@ -1253,6 +1282,8 @@ class MainWindow(QMainWindow):
             try:
                 self.repository.add_order(*dialog.values())
                 self.refresh_all()
+            except PermissionDeniedError as error:
+                QMessageBox.critical(self, "Acesso Negado", str(error))
             except ValueError as error:
                 QMessageBox.warning(self, "OS Inválida", str(error))
 
@@ -1268,6 +1299,8 @@ class MainWindow(QMainWindow):
             try:
                 self.repository.update_order(item_id, *dialog.values())
                 self.refresh_all()
+            except PermissionDeniedError as error:
+                QMessageBox.critical(self, "Acesso Negado", str(error))
             except ValueError as error:
                 QMessageBox.warning(self, "OS Inválida", str(error))
 
@@ -1285,5 +1318,8 @@ class MainWindow(QMainWindow):
             return
         if QMessageBox.question(self, "Confirmar Exclusão", f"Deseja realmente excluir a OS-{item_id:04d}?") != QMessageBox.Yes:
             return
-        self.repository.delete_order(item_id)
-        self.refresh_all()
+        try:
+            self.repository.delete_order(item_id)
+            self.refresh_all()
+        except PermissionDeniedError as error:
+            QMessageBox.critical(self, "Acesso Negado", str(error))

@@ -6,9 +6,30 @@ from .core.models import Cliente, Equipamento, OrdemServico, StatusOS
 from .database import Database
 
 
+class PermissionDeniedError(Exception):
+    """Exceção levantada quando uma operação viola as regras de RBAC."""
+    pass
+
+
 class Repository:
-    def __init__(self, database: Database) -> None:
+    def __init__(self, database: Database, current_user: dict | None = None) -> None:
         self.database = database
+        self.current_user = current_user
+
+    def set_current_user(self, current_user: dict | None) -> None:
+        self.current_user = current_user
+
+    @property
+    def current_role(self) -> str:
+        if not self.current_user:
+            return "Gestor"  # Default permissivo para testes sem usuário explícito
+        return self.current_user.get("perfil", "Gestor")
+
+    def _require_role(self, *allowed_roles: str, action: str = "esta operação") -> None:
+        if self.current_role not in allowed_roles:
+            raise PermissionDeniedError(
+                f"Acesso negado: Perfil '{self.current_role}' não tem permissão para {action}."
+            )
 
     # --- CLIENTES ---
 
@@ -78,6 +99,7 @@ class Repository:
                 raise ValueError(f"Cliente #{customer_id} não encontrado para atualização.")
 
     def delete_customer(self, customer_id: int) -> tuple[bool, str]:
+        self._require_role("Gestor", action="excluir clientes")
         with self.database.connect() as db:
             count_orders = db.execute("SELECT COUNT(*) FROM ordens_servico WHERE cliente_id=?", (customer_id,)).fetchone()[0]
             if count_orders:
@@ -166,6 +188,7 @@ class Repository:
         return cursor.lastrowid
 
     def delete_equipment(self, equipment_id: int) -> tuple[bool, str]:
+        self._require_role("Gestor", action="excluir equipamentos")
         with self.database.connect() as db:
             count = db.execute(
                 "SELECT COUNT(*) FROM ordens_servico WHERE equipamento_id=?",
@@ -307,10 +330,19 @@ class Repository:
         os_obj.validate()
 
         with self.database.connect() as db:
-            prev_row = db.execute("SELECT status, data_finalizacao FROM ordens_servico WHERE id=?", (order_id,)).fetchone()
+            prev_row = db.execute("SELECT * FROM ordens_servico WHERE id=?", (order_id,)).fetchone()
             if not prev_row:
                 raise ValueError(f"Ordem de Serviço #{order_id} não encontrada.")
             previous_status = prev_row["status"]
+
+            # Regras RBAC para Atendente: não pode finalizar OS nem alterar valores financeiros
+            if self.current_role == "Atendente":
+                if status == StatusOS.FINALIZADA.value and previous_status != StatusOS.FINALIZADA.value:
+                    raise PermissionDeniedError("Acesso negado: Perfil 'Atendente' não tem permissão para finalizar Ordens de Serviço.")
+                if abs(float(prev_row["valor"] or 0.0) - float(valor)) > 0.001 or \
+                   abs(float(prev_row["valor_servico"] or 0.0) - float(valor_servico)) > 0.001 or \
+                   abs(float(prev_row["valor_pecas"] or 0.0) - float(valor_pecas)) > 0.001:
+                    raise PermissionDeniedError("Acesso negado: Perfil 'Atendente' não tem permissão para alterar valores de Ordens de Serviço.")
 
             now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             data_fim = prev_row["data_finalizacao"]
@@ -349,6 +381,7 @@ class Repository:
                 )
 
     def delete_order(self, order_id: int) -> None:
+        self._require_role("Gestor", action="excluir ordens de serviço")
         with self.database.connect() as db:
             db.execute("DELETE FROM ordens_servico WHERE id=?", (order_id,))
 
