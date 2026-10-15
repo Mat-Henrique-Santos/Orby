@@ -119,7 +119,7 @@ class Repository:
                 ).fetchone()
             else:
                 row = db.execute(
-                    "SELECT 1 FROM clientes WHERE lower(nome)=lower(?) OR telefone=? LIMIT 1",
+                    "SELECT 1 FROM clientes WHERE lower(nome)=lower(?) AND telefone=? LIMIT 1",
                     (nome.strip(), telefone.strip()),
                 ).fetchone()
             return bool(row)
@@ -144,17 +144,68 @@ class Repository:
 
     # --- EQUIPAMENTOS ---
 
-    def equipment(self, customer_id: int | None = None) -> list[dict]:
+    def equipment(self, customer_id: int | None = None, term: str = "") -> list[dict]:
         sql = """SELECT e.*, c.nome AS cliente_nome FROM equipamentos e
                  JOIN clientes c ON c.id=e.cliente_id"""
+        conditions = []
         params = []
         if customer_id:
-            sql += " WHERE e.cliente_id=?"
+            conditions.append("e.cliente_id = ?")
             params.append(customer_id)
+        if term:
+            t = f"%{term}%"
+            conditions.append("(c.nome LIKE ? OR e.tipo LIKE ? OR (e.marca IS NOT NULL AND e.marca LIKE ?) OR (e.modelo IS NOT NULL AND e.modelo LIKE ?) OR (e.numero_serie IS NOT NULL AND e.numero_serie LIKE ?))")
+            params.extend([t, t, t, t, t])
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
         sql += " ORDER BY c.nome COLLATE NOCASE, e.tipo, e.marca, e.modelo"
         with self.database.connect() as db:
             rows = db.execute(sql, params).fetchall()
         return [dict(row) for row in rows]
+
+    def single_equipment(self, equipment_id: int) -> dict | None:
+        with self.database.connect() as db:
+            row = db.execute(
+                """SELECT e.*, c.nome AS cliente_nome FROM equipamentos e
+                   JOIN clientes c ON c.id=e.cliente_id
+                   WHERE e.id = ?""",
+                (equipment_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def update_equipment(
+        self,
+        equipment_id: int,
+        cliente_id: int,
+        tipo: str,
+        marca: str = "",
+        modelo: str = "",
+        numero_serie: str = "",
+        acessorios: str = "",
+        condicao: str = "",
+        observacoes: str = "",
+    ) -> None:
+        eq = Equipamento(
+            id=equipment_id,
+            cliente_id=cliente_id,
+            tipo=tipo.strip(),
+            marca=marca.strip() or None,
+            modelo=modelo.strip() or None,
+            numero_serie=numero_serie.strip() or None,
+            acessorios=acessorios.strip() or None,
+            condicao_entrada=condicao.strip() or None,
+            observacoes=observacoes.strip() or None,
+        )
+        eq.validate()
+        with self.database.connect() as db:
+            cursor = db.execute(
+                """UPDATE equipamentos
+                   SET cliente_id=?, tipo=?, marca=?, modelo=?, numero_serie=?, acessorios=?, condicao_entrada=?, observacoes=?
+                   WHERE id=?""",
+                (eq.cliente_id, eq.tipo, eq.marca, eq.modelo, eq.numero_serie, eq.acessorios, eq.condicao_entrada, eq.observacoes, equipment_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Equipamento #{equipment_id} não encontrado para atualização.")
 
     def add_equipment(
         self,
@@ -422,11 +473,11 @@ class Repository:
                     FROM ordens_servico {where_clause}"""
             ).fetchone()
 
-            # Previsão a receber (OS ativas e aprovadas)
+            # Previsão a receber (todas as OS abertas/em andamento não finalizadas nem canceladas)
             prev_row = db.execute(
                 """SELECT COALESCE(SUM(valor), 0) as receita_prevista
                    FROM ordens_servico
-                   WHERE status IN ('Aguardando Aprovação', 'Em Reparo', 'Aguardando Retirada')"""
+                   WHERE status NOT IN ('Finalizada', 'Cancelada')"""
             ).fetchone()
 
             # Distribuição por Forma de Pagamento

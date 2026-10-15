@@ -59,6 +59,73 @@ FORMA_PAGAMENTO_OPCOES = [
 ]
 
 
+import re
+
+
+def validar_telefone(telefone: str) -> bool:
+    """Valida se o telefone possui 10 ou 11 dígitos numéricos após limpeza."""
+    digitos = re.sub(r"\D", "", telefone or "")
+    return len(digitos) in (10, 11)
+
+
+def validar_email(email: str) -> bool:
+    """Valida o formato básico do endereço de e-mail."""
+    if not email or not email.strip():
+        return True
+    padrao = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    return bool(re.match(padrao, email.strip()))
+
+
+def validar_cpf(cpf: str) -> bool:
+    """Valida CPF com cálculo dos dígitos verificadores."""
+    d = [int(c) for c in cpf if c.isdigit()]
+    if len(d) != 11 or len(set(d)) == 1:
+        return False
+    # Primeiro dígito verificador
+    soma1 = sum(d[i] * (10 - i) for i in range(9))
+    resto1 = (soma1 * 10) % 11
+    dig1 = 0 if resto1 in (10, 11) else resto1
+    if dig1 != d[9]:
+        return False
+    # Segundo dígito verificador
+    soma2 = sum(d[i] * (11 - i) for i in range(10))
+    resto2 = (soma2 * 10) % 11
+    dig2 = 0 if resto2 in (10, 11) else resto2
+    return dig2 == d[10]
+
+
+def validar_cnpj(cnpj: str) -> bool:
+    """Valida CNPJ com cálculo dos dígitos verificadores."""
+    d = [int(c) for c in cnpj if c.isdigit()]
+    if len(d) != 14 or len(set(d)) == 1:
+        return False
+    # Primeiro dígito
+    pesos1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma1 = sum(d[i] * pesos1[i] for i in range(12))
+    resto1 = soma1 % 11
+    dig1 = 0 if resto1 < 2 else 11 - resto1
+    if dig1 != d[12]:
+        return False
+    # Segundo dígito
+    pesos2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+    soma2 = sum(d[i] * pesos2[i] for i in range(13))
+    resto2 = soma2 % 11
+    dig2 = 0 if resto2 < 2 else 11 - resto2
+    return dig2 == d[13]
+
+
+def validar_documento(doc: str) -> bool:
+    """Valida se o documento é um CPF (11 dígitos) ou CNPJ (14 dígitos) válido."""
+    if not doc or not doc.strip():
+        return True
+    digitos = re.sub(r"\D", "", doc)
+    if len(digitos) == 11:
+        return validar_cpf(digitos)
+    if len(digitos) == 14:
+        return validar_cnpj(digitos)
+    return False
+
+
 @dataclass
 class Cliente:
     id: int | None
@@ -74,6 +141,12 @@ class Cliente:
             raise ValueError("O nome do cliente é obrigatório.")
         if not self.telefone or not self.telefone.strip():
             raise ValueError("O telefone do cliente é obrigatório.")
+        if not validar_telefone(self.telefone):
+            raise ValueError("Telefone inválido. O telefone deve conter DDD + 8 ou 9 dígitos (10 ou 11 números).")
+        if self.email and not validar_email(self.email):
+            raise ValueError(f"E-mail '{self.email}' possui formato inválido.")
+        if self.documento and not validar_documento(self.documento):
+            raise ValueError(f"Documento '{self.documento}' inválido (CPF ou CNPJ incorreto).")
 
 
 @dataclass

@@ -28,14 +28,14 @@ class TestRepository(unittest.TestCase):
             pass
 
     def test_customer_crud(self):
-        cust_id = self.repo.add_customer("Carlos Silva", "11988887777", "carlos@teste.com", "12345678900", "Rua A, 100")
+        cust_id = self.repo.add_customer("Carlos Silva", "11988887777", "carlos@teste.com", "52998224725", "Rua A, 100")
         self.assertIsNotNone(cust_id)
 
         cust = self.repo.customer(cust_id)
         self.assertEqual(cust["nome"], "Carlos Silva")
-        self.assertEqual(cust["documento"], "12345678900")
+        self.assertEqual(cust["documento"], "52998224725")
 
-        self.repo.update_customer(cust_id, "Carlos Silva Jr", "11988887777", "carlosjr@teste.com", "12345678900", "Rua B, 200")
+        self.repo.update_customer(cust_id, "Carlos Silva Jr", "11988887777", "carlosjr@teste.com", "52998224725", "Rua B, 200")
         cust_updated = self.repo.customer(cust_id)
         self.assertEqual(cust_updated["nome"], "Carlos Silva Jr")
         self.assertEqual(cust_updated["endereco"], "Rua B, 200")
@@ -112,6 +112,34 @@ class TestRepository(unittest.TestCase):
         self.repo.delete_order(order_id)
         ok_eq2, msg_eq2 = self.repo.delete_equipment(eq_id)
         self.assertTrue(ok_eq2)
+
+    def test_equipment_update_and_search(self):
+        cust_id = self.repo.add_customer("Fernanda Teste", "11988889999")
+        eq_id = self.repo.add_equipment(cust_id, "Impressora", "HP", "LaserJet Pro", "SN9988")
+
+        # Busca por termo
+        res = self.repo.equipment(term="LaserJet")
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["id"], eq_id)
+
+        # Edição de equipamento
+        self.repo.update_equipment(
+            equipment_id=eq_id,
+            cliente_id=cust_id,
+            tipo="Impressora Multifuncional",
+            marca="HP",
+            modelo="LaserJet Pro M404",
+            numero_serie="SN9988-REV2",
+            acessorios="Cabo de força",
+            condicao="Excelente",
+            observacoes="Toner novo instalado",
+        )
+
+        eq_updated = self.repo.single_equipment(eq_id)
+        self.assertIsNotNone(eq_updated)
+        self.assertEqual(eq_updated["tipo"], "Impressora Multifuncional")
+        self.assertEqual(eq_updated["modelo"], "LaserJet Pro M404")
+        self.assertEqual(eq_updated["numero_serie"], "SN9988-REV2")
 
 
 if __name__ == "__main__":

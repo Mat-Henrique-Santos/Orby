@@ -19,6 +19,32 @@ class TestModels(unittest.TestCase):
         with self.assertRaises(ValueError):
             c.validate()
 
+        c_letras = Cliente(id=1, nome="João", telefone="abc")
+        with self.assertRaises(ValueError):
+            c_letras.validate()
+
+        c_curto = Cliente(id=1, nome="João", telefone="12345")
+        with self.assertRaises(ValueError):
+            c_curto.validate()
+
+    def test_cliente_email_validation(self):
+        c_invalido = Cliente(id=1, nome="João", telefone="11999998888", email="isso-nao-e-email")
+        with self.assertRaises(ValueError):
+            c_invalido.validate()
+
+        c_valido = Cliente(id=1, nome="João", telefone="11999998888", email="contato@empresa.com.br")
+        c_valido.validate()
+        self.assertEqual(c_valido.email, "contato@empresa.com.br")
+
+    def test_cliente_documento_cpf_cnpj(self):
+        c_cpf_invalido = Cliente(id=1, nome="João", telefone="11999998888", documento="123")
+        with self.assertRaises(ValueError):
+            c_cpf_invalido.validate()
+
+        # CPF válido conhecido (ex: 52998224725 gerado com algoritmo real)
+        c_cpf_valido = Cliente(id=1, nome="João", telefone="11999998888", documento="529.982.247-25")
+        c_cpf_valido.validate()
+
     def test_equipamento_descricao_completa(self):
         eq = Equipamento(id=1, cliente_id=1, tipo="Notebook", marca="Dell", modelo="Inspiron 15")
         self.assertEqual(eq.descricao_completa, "Notebook Dell Inspiron 15")

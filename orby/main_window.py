@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QLocale, QSize, Qt
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -24,7 +24,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .core.models import FORMA_PAGAMENTO_OPCOES, StatusOS
+from .core.models import (
+    FORMA_PAGAMENTO_OPCOES,
+    StatusOS,
+    validar_documento,
+    validar_email,
+    validar_telefone,
+)
 from .importer import read_table, validate_customers
 from .repository import PermissionDeniedError, Repository
 from .ui.components import (
@@ -38,6 +44,12 @@ from .ui.components import (
 from .ui.icons import IconWidget, clear_icon_cache, get_icon, get_pixmap
 from .ui.theme import get_current_palette, is_dark_mode, toggle_theme
 from .ui.tokens import DIMENSIONS, ICON_SIZES, SPACING, TYPOGRAPHY
+
+
+def formatar_moeda(valor: float | int | None) -> str:
+    """Formata valores numéricos para o padrão monetário brasileiro R$ 0.000,00."""
+    v = float(valor or 0.0)
+    return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 class CustomerDialog(QDialog):
@@ -94,9 +106,39 @@ class CustomerDialog(QDialog):
         )
 
     def accept(self) -> None:
-        if not self.name.text().strip() or not self.phone.text().strip():
+        nome = self.name.text().strip()
+        telefone = self.phone.text().strip()
+        email = self.email.text().strip()
+        documento = self.document.text().strip()
+
+        if not nome or not telefone:
             QMessageBox.warning(self, "Campos Obrigatórios", "Informe ao menos o nome e o telefone do cliente.")
             return
+
+        if not validar_telefone(telefone):
+            QMessageBox.warning(
+                self,
+                "Telefone Inválido",
+                "O telefone deve conter DDD + 8 ou 9 dígitos numéricos (ex: 11987654321 ou (11) 98765-4321).",
+            )
+            return
+
+        if email and not validar_email(email):
+            QMessageBox.warning(
+                self,
+                "E-mail Inválido",
+                f"O e-mail '{email}' não possui um formato válido (ex: contato@empresa.com).",
+            )
+            return
+
+        if documento and not validar_documento(documento):
+            QMessageBox.warning(
+                self,
+                "Documento Inválido",
+                f"O CPF ou CNPJ informado ('{documento}') é inválido.",
+            )
+            return
+
         super().accept()
 
 
@@ -150,8 +192,11 @@ class OrderDialog(QDialog):
                 self.status.addItem(StatusOS.ABERTA.value)
                 self.status.setEnabled(False)
 
-        # Discriminação de Valores Financeiros
+        # Discriminação de Valores Financeiros com formato brasileiro
+        loc_br = QLocale(QLocale.Portuguese, QLocale.Brazil)
+
         self.valor_servico = QDoubleSpinBox()
+        self.valor_servico.setLocale(loc_br)
         self.valor_servico.setMaximum(9_999_999.99)
         self.valor_servico.setPrefix("R$ ")
         self.valor_servico.setDecimals(2)
@@ -159,6 +204,7 @@ class OrderDialog(QDialog):
         self.valor_servico.valueChanged.connect(self.recalc_total)
 
         self.valor_pecas = QDoubleSpinBox()
+        self.valor_pecas.setLocale(loc_br)
         self.valor_pecas.setMaximum(9_999_999.99)
         self.valor_pecas.setPrefix("R$ ")
         self.valor_pecas.setDecimals(2)
@@ -166,6 +212,7 @@ class OrderDialog(QDialog):
         self.valor_pecas.valueChanged.connect(self.recalc_total)
 
         self.value = QDoubleSpinBox()
+        self.value.setLocale(loc_br)
         self.value.setMaximum(9_999_999.99)
         self.value.setPrefix("R$ ")
         self.value.setDecimals(2)
@@ -265,9 +312,9 @@ class OrderDialog(QDialog):
 
 
 class EquipmentDialog(QDialog):
-    def __init__(self, parent, customers: list[dict]):
+    def __init__(self, parent, customers: list[dict], equipment: dict | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Novo Equipamento")
+        self.setWindowTitle(f"Editar Equipamento #{equipment['id']}" if equipment else "Novo Equipamento")
         self.resize(520, 440)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACING.XXL, SPACING.XXL, SPACING.XXL, SPACING.XXL)
@@ -279,20 +326,24 @@ class EquipmentDialog(QDialog):
         self.customer = QComboBox()
         for item in customers:
             self.customer.addItem(item["nome"], item["id"])
+        if equipment:
+            idx = self.customer.findData(equipment["cliente_id"])
+            if idx >= 0:
+                self.customer.setCurrentIndex(idx)
 
-        self.type = QLineEdit()
+        self.type = QLineEdit(equipment["tipo"] if equipment else "")
         self.type.setPlaceholderText("Ex: Notebook, Máquina de Solda, Ar-Condicionado, Motor, Celular")
-        self.brand = QLineEdit()
+        self.brand = QLineEdit(equipment.get("marca") or "" if equipment else "")
         self.brand.setPlaceholderText("Ex: Dell, Makita, Consul, WEG, Samsung")
-        self.model = QLineEdit()
+        self.model = QLineEdit(equipment.get("modelo") or "" if equipment else "")
         self.model.setPlaceholderText("Ex: Inspiron 15, Inverter 12k, Trifásico, LaserJet")
-        self.serial = QLineEdit()
+        self.serial = QLineEdit(equipment.get("numero_serie") or "" if equipment else "")
         self.serial.setPlaceholderText("Número de Série ou IMEI")
-        self.accessories = QLineEdit()
+        self.accessories = QLineEdit(equipment.get("acessorios") or "" if equipment else "")
         self.accessories.setPlaceholderText("Ex: Carregador, Cabo, Capa")
-        self.condition = QLineEdit()
+        self.condition = QLineEdit(equipment.get("condicao_entrada") or "" if equipment else "")
         self.condition.setPlaceholderText("Ex: Riscos na tampa, tela trincada")
-        self.notes = QTextEdit()
+        self.notes = QTextEdit(equipment.get("observacoes") or "" if equipment else "")
         self.notes.setPlaceholderText("Observações técnicas adicionais...")
         self.notes.setFixedHeight(60)
 
@@ -308,7 +359,7 @@ class EquipmentDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         save_btn = buttons.button(QDialogButtonBox.Save)
-        save_btn.setText("Cadastrar Equipamento")
+        save_btn.setText("Salvar Equipamento" if equipment else "Cadastrar Equipamento")
         save_btn.setObjectName("PrimaryButton")
         save_btn.setIcon(get_icon("circle-check", color="#ffffff", size=ICON_SIZES.SM))
         cancel_btn = buttons.button(QDialogButtonBox.Cancel)
@@ -682,10 +733,23 @@ class MainWindow(QMainWindow):
     def on_global_search(self, text: str) -> None:
         term = text.strip()
         idx = self.pages.currentIndex()
-        if idx == 2:
+        if idx == 2 and hasattr(self, "customer_search"):
             self.customer_search.setText(term)
-        elif idx == 4:
+        elif idx == 3 and hasattr(self, "equipment_search"):
+            self.equipment_search.setText(term)
+        elif idx == 4 and hasattr(self, "order_search"):
             self.order_search.setText(term)
+        elif idx in (0, 1) and term:
+            # Se o usuário digitou no Dashboard ou Financeiro, navegar para a tela mais relevante com base no perfil
+            if self.perfil == "Técnico":
+                target_page = 4  # Ordens de Serviço
+            else:
+                target_page = 2  # Clientes (Gestor/Atendente)
+            self.open_page(target_page)
+            if target_page == 2 and hasattr(self, "customer_search"):
+                self.customer_search.setText(term)
+            elif target_page == 4 and hasattr(self, "order_search"):
+                self.order_search.setText(term)
 
     def toggle_dark_mode(self) -> None:
         app = QApplication.instance()
@@ -988,11 +1052,27 @@ class MainWindow(QMainWindow):
         header.addWidget(add_btn)
         card_layout.addLayout(header)
 
+        filter_bar = QHBoxLayout()
+        self.equipment_search = QLineEdit()
+        self.equipment_search.setObjectName("PillSearch")
+        self.equipment_search.addAction(get_icon("search", color=get_current_palette().TEXT_SECONDARY, size=14), QLineEdit.LeadingPosition)
+        self.equipment_search.setPlaceholderText("Filtrar por tipo, marca, modelo, série ou cliente...")
+        self.equipment_search.textChanged.connect(self.refresh_equipment)
+        filter_bar.addWidget(self.equipment_search)
+        card_layout.addLayout(filter_bar)
+
         self.equipment_table = ModernTableWidget(0, 5)
         self.equipment_table.setHorizontalHeaderLabels(["ID", "Cliente", "Tipo", "Marca / Modelo", "Nº de Série"])
+        self.equipment_table.cellDoubleClicked.connect(lambda *_: self.edit_equipment())
         card_layout.addWidget(self.equipment_table)
 
         actions = QHBoxLayout()
+        self.edit_equipment_btn = QPushButton("Editar Equipamento")
+        self.edit_equipment_btn.setIcon(get_icon("edit", size=ICON_SIZES.SM))
+        self.edit_equipment_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        self.edit_equipment_btn.clicked.connect(self.edit_equipment)
+        actions.addWidget(self.edit_equipment_btn)
+
         self.delete_equipment_btn = QPushButton("Excluir Equipamento")
         self.delete_equipment_btn.setIcon(get_icon("trash", size=ICON_SIZES.SM))
         self.delete_equipment_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
@@ -1091,10 +1171,10 @@ class MainWindow(QMainWindow):
         if self.perfil != "Gestor":
             self.card_faturamento.set_value("Restrito")
         else:
-            fat = data.get("faturamento") or 0.0
-            self.card_faturamento.set_value(f"R$ {fat:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+            self.card_faturamento.set_value(formatar_moeda(data.get("faturamento")))
 
-        orders = self.repository.orders()[:10]
+        # Filtrar apenas OS realmente em andamento (excluindo Finalizadas e Canceladas)
+        orders = [o for o in self.repository.orders() if o["status"] not in ("Finalizada", "Cancelada")][:10]
         self.dash_table.setRowCount(0)
         for item in orders:
             row = self.dash_table.rowCount()
@@ -1104,7 +1184,7 @@ class MainWindow(QMainWindow):
             self.dash_table.setItem(row, 2, QTableWidgetItem(item["equipamento_nome"]))
             badge = StatusBadge(item["status"])
             self.dash_table.setCellWidget(row, 3, badge)
-            valor_texto = "Restrito" if self.perfil == "Técnico" else f"R$ {item['valor']:.2f}"
+            valor_texto = "Restrito" if self.perfil == "Técnico" else formatar_moeda(item["valor"])
             self.dash_table.setItem(row, 4, QTableWidgetItem(valor_texto))
             self.dash_table.setItem(row, 5, QTableWidgetItem(item["data_abertura"][:10]))
 
@@ -1112,13 +1192,10 @@ class MainWindow(QMainWindow):
         period = self.finance_period.currentData() if hasattr(self, "finance_period") else "all"
         fin = self.repository.financial_dashboard(period)
 
-        def fmt(v: float) -> str:
-            return f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-        self.card_fat_realizado.set_value(fmt(fin["faturamento_realizado"]))
-        self.card_rec_prevista.set_value(fmt(fin["receita_prevista"]))
-        self.card_ticket_medio.set_value(fmt(fin["ticket_medio"]))
-        self.card_lucro_servicos.set_value(fmt(fin["total_servicos"]))
+        self.card_fat_realizado.set_value(formatar_moeda(fin["faturamento_realizado"]))
+        self.card_rec_prevista.set_value(formatar_moeda(fin["receita_prevista"]))
+        self.card_ticket_medio.set_value(formatar_moeda(fin["ticket_medio"]))
+        self.card_lucro_servicos.set_value(formatar_moeda(fin["total_servicos"]))
 
         # Formas de pagamento
         self.pay_table.setRowCount(0)
@@ -1127,7 +1204,7 @@ class MainWindow(QMainWindow):
             self.pay_table.insertRow(row)
             self.pay_table.setItem(row, 0, QTableWidgetItem(item["forma"]))
             self.pay_table.setItem(row, 1, QTableWidgetItem(str(item["qtd"])))
-            self.pay_table.setItem(row, 2, QTableWidgetItem(fmt(item["total"])))
+            self.pay_table.setItem(row, 2, QTableWidgetItem(formatar_moeda(item["total"])))
 
         # Extrato
         self.extrato_table.setRowCount(0)
@@ -1137,9 +1214,9 @@ class MainWindow(QMainWindow):
             self.extrato_table.setItem(row, 0, QTableWidgetItem(f"OS-{item['id']:04d}"))
             self.extrato_table.setItem(row, 1, QTableWidgetItem(item["cliente_nome"]))
             self.extrato_table.setItem(row, 2, QTableWidgetItem(item["equipamento_nome"]))
-            self.extrato_table.setItem(row, 3, QTableWidgetItem(fmt(item.get("valor_servico") or 0.0)))
-            self.extrato_table.setItem(row, 4, QTableWidgetItem(fmt(item.get("valor_pecas") or 0.0)))
-            self.extrato_table.setItem(row, 5, QTableWidgetItem(fmt(item["valor"])))
+            self.extrato_table.setItem(row, 3, QTableWidgetItem(formatar_moeda(item.get("valor_servico"))))
+            self.extrato_table.setItem(row, 4, QTableWidgetItem(formatar_moeda(item.get("valor_pecas"))))
+            self.extrato_table.setItem(row, 5, QTableWidgetItem(formatar_moeda(item["valor"])))
             self.extrato_table.setItem(row, 6, QTableWidgetItem(item.get("forma_pagamento") or "—"))
 
     def refresh_customers(self) -> None:
@@ -1174,12 +1251,13 @@ class MainWindow(QMainWindow):
                 self.order_table.setItem(row, 6, QTableWidgetItem("Restrito"))
                 self.order_table.setItem(row, 7, QTableWidgetItem("Restrito"))
             else:
-                self.order_table.setItem(row, 5, QTableWidgetItem(f"R$ {item.get('valor_servico') or 0.0:.2f}"))
-                self.order_table.setItem(row, 6, QTableWidgetItem(f"R$ {item.get('valor_pecas') or 0.0:.2f}"))
-                self.order_table.setItem(row, 7, QTableWidgetItem(f"R$ {item['valor']:.2f}"))
+                self.order_table.setItem(row, 5, QTableWidgetItem(formatar_moeda(item.get("valor_servico"))))
+                self.order_table.setItem(row, 6, QTableWidgetItem(formatar_moeda(item.get("valor_pecas"))))
+                self.order_table.setItem(row, 7, QTableWidgetItem(formatar_moeda(item["valor"])))
 
     def refresh_equipment(self) -> None:
-        rows = self.repository.equipment()
+        term = self.equipment_search.text() if hasattr(self, "equipment_search") else ""
+        rows = self.repository.equipment(term=term)
         self.equipment_table.setRowCount(0)
         for item in rows:
             row = self.equipment_table.rowCount()
@@ -1190,6 +1268,24 @@ class MainWindow(QMainWindow):
             self.equipment_table.setItem(row, 2, QTableWidgetItem(item["tipo"]))
             self.equipment_table.setItem(row, 3, QTableWidgetItem(marca_modelo or "—"))
             self.equipment_table.setItem(row, 4, QTableWidgetItem(item.get("numero_serie") or "—"))
+
+    def edit_equipment(self) -> None:
+        item_id = self.selected_id(self.equipment_table)
+        if item_id is None:
+            return
+        customers = self.repository.customers()
+        equipment = self.repository.single_equipment(item_id)
+        if not equipment:
+            return
+        dialog = EquipmentDialog(self, customers, equipment=equipment)
+        if dialog.exec():
+            try:
+                self.repository.update_equipment(item_id, *dialog.values())
+                self.refresh_all()
+            except PermissionDeniedError as error:
+                QMessageBox.critical(self, "Acesso Negado", str(error))
+            except ValueError as error:
+                QMessageBox.warning(self, "Equipamento Inválido", str(error))
 
     def selected_id(self, table: QTableWidget) -> int | None:
         row = table.currentRow()
