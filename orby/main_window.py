@@ -10,7 +10,9 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -397,7 +399,7 @@ class ImportDialog(QDialog):
         self.rows: list[dict] = []
         self.approved: list[dict] = []
         self.setWindowTitle("Importar Clientes (CSV / XLSX)")
-        self.resize(820, 580)
+        self.resize(880, 640)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACING.XXL, SPACING.XXL, SPACING.XXL, SPACING.XXL)
@@ -446,7 +448,14 @@ class ImportDialog(QDialog):
 
         self.table = ModernTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Linha", "Nome", "Telefone", "Resultado / Validação"])
-        layout.addWidget(self.table)
+        self.table.setMinimumHeight(200)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.setColumnWidth(1, 160)
+        self.table.setColumnWidth(2, 140)
+        layout.addWidget(self.table, 1)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         self.save_btn = self.buttons.button(QDialogButtonBox.Save)
@@ -576,7 +585,7 @@ class MainWindow(QMainWindow):
         badge_icon = "shield" if self.perfil == "Gestor" else ("wrench" if self.perfil == "Técnico" else "user")
         user_layout.addWidget(IconWidget(badge_icon, size=ICON_SIZES.SM))
         user_lbl = QLabel(f"<b>{self.current_user.get('nome', 'Usuário')}</b> ({self.perfil})")
-        user_lbl.setStyleSheet(f"font-size: {TYPOGRAPHY.SIZE_CAPTION + 1}px; color: {get_current_palette().TEXT_PRIMARY};")
+        user_lbl.setObjectName("UserBadgeLabel")
         user_layout.addWidget(user_lbl)
         top_header.addWidget(user_frame)
 
@@ -614,7 +623,7 @@ class MainWindow(QMainWindow):
         logo_text_box.setSpacing(SPACING.XXS)
         logo_title = QLabel("ORBY")
         logo_title.setObjectName("LogoTitle")
-        logo_sub = QLabel("Serviços & Manutenção")
+        logo_sub = QLabel("Gestão & Serviços")
         logo_sub.setObjectName("LogoSubtitle")
         logo_text_box.addWidget(logo_title)
         logo_text_box.addWidget(logo_sub)
@@ -652,8 +661,9 @@ class MainWindow(QMainWindow):
         dock_label.setObjectName("DockSectionLabel")
         sidebar_layout.addWidget(dock_label)
 
-        dock_grid = QHBoxLayout()
+        dock_grid = QGridLayout()
         dock_grid.setSpacing(SPACING.SM)
+        dock_grid.setContentsMargins(0, 0, 0, 0)
 
         btn_refresh = QPushButton()
         btn_refresh.setObjectName("DockTile")
@@ -689,11 +699,12 @@ class MainWindow(QMainWindow):
         self.btn_logout.setToolTip("Encerrar Sessão / Trocar Usuário")
         self.btn_logout.clicked.connect(self.logout)
 
-        dock_grid.addWidget(btn_refresh)
-        dock_grid.addWidget(self.btn_import)
-        dock_grid.addWidget(self.btn_theme)
-        dock_grid.addWidget(btn_about)
-        dock_grid.addWidget(self.btn_logout)
+        # Distribuir em linha harmônica com espaçamento perfeito
+        dock_grid.addWidget(btn_refresh, 0, 0)
+        dock_grid.addWidget(self.btn_import, 0, 1)
+        dock_grid.addWidget(self.btn_theme, 0, 2)
+        dock_grid.addWidget(btn_about, 0, 3)
+        dock_grid.addWidget(self.btn_logout, 0, 4)
         sidebar_layout.addLayout(dock_grid)
 
         sidebar_layout.addSpacing(SPACING.XS)
@@ -936,7 +947,10 @@ class MainWindow(QMainWindow):
         pay_layout.addLayout(pay_header)
 
         self.pay_table = ModernTableWidget(0, 3)
-        self.pay_table.setHorizontalHeaderLabels(["Forma", "Qtd", "Total (R$)"])
+        self.pay_table.setHorizontalHeaderLabels(["Forma", "Qtd", "Total"])
+        self.pay_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.pay_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.pay_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         pay_layout.addWidget(self.pay_table)
         mid_layout.addWidget(pay_card)
 
@@ -958,6 +972,13 @@ class MainWindow(QMainWindow):
 
         self.extrato_table = ModernTableWidget(0, 7)
         self.extrato_table.setHorizontalHeaderLabels(["OS", "Cliente", "Equipamento", "Serviço", "Peças", "Total", "Pagamento"])
+        self.extrato_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.extrato_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         extrato_layout.addWidget(self.extrato_table)
         mid_layout.addWidget(extrato_card, 1)
 

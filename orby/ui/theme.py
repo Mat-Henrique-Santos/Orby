@@ -125,6 +125,11 @@ QFrame#UserBadge {{
     border-radius: {RADIUS.MD}px;
 }}
 
+QLabel#UserBadgeLabel {{
+    color: {c.TEXT_PRIMARY};
+    font-size: {TYPOGRAPHY.SIZE_CAPTION + 1}px;
+}}
+
 /* --- Títulos e Subtítulos Padronizados --- */
 QLabel#SectionTitle {{
     font-size: {TYPOGRAPHY.SIZE_TITLE}px;
@@ -292,9 +297,90 @@ QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBo
     background: {c.SURFACE_INPUT_FOCUS};
 }}
 
+/* --- Customização de Listas de Seleção (QComboBox) --- */
+QComboBox {{
+    padding-right: {SPACING.XXL}px;
+}}
+
 QComboBox::drop-down {{
-    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
     width: {SPACING.XXL}px;
+    border-left: 1px solid {c.BORDER};
+    border-top-right-radius: {RADIUS.SM}px;
+    border-bottom-right-radius: {RADIUS.SM}px;
+    background: {c.SURFACE_ELEVATED};
+}}
+
+QComboBox::down-arrow {{
+    width: 0px;
+    height: 0px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid {c.TEXT_PRIMARY};
+    margin: auto;
+}}
+
+QComboBox QAbstractItemView {{
+    background-color: {c.SURFACE_ELEVATED};
+    color: {c.TEXT_PRIMARY};
+    selection-background-color: {c.PRIMARY};
+    selection-color: #ffffff;
+    border: 1px solid {c.BORDER};
+    border-radius: {RADIUS.SM}px;
+    padding: {SPACING.XS}px;
+    outline: none;
+}}
+
+/* --- Customização de Campos Numéricos (QDoubleSpinBox / QSpinBox) --- */
+QDoubleSpinBox, QSpinBox {{
+    padding-right: {SPACING.XL + 2}px;
+}}
+
+QDoubleSpinBox::up-button, QSpinBox::up-button {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: {SPACING.XL}px;
+    border-left: 1px solid {c.BORDER};
+    border-bottom: 0.5px solid {c.BORDER};
+    background: {c.SURFACE_ELEVATED};
+    border-top-right-radius: {RADIUS.SM}px;
+}}
+
+QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover {{
+    background: {c.SURFACE_HOVER};
+}}
+
+QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {{
+    width: 0px;
+    height: 0px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid {c.TEXT_PRIMARY};
+    margin: auto;
+}}
+
+QDoubleSpinBox::down-button, QSpinBox::down-button {{
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: {SPACING.XL}px;
+    border-left: 1px solid {c.BORDER};
+    border-top: 0.5px solid {c.BORDER};
+    background: {c.SURFACE_ELEVATED};
+    border-bottom-right-radius: {RADIUS.SM}px;
+}}
+
+QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {{
+    background: {c.SURFACE_HOVER};
+}}
+
+QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {{
+    width: 0px;
+    height: 0px;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid {c.TEXT_PRIMARY};
+    margin: auto;
 }}
 
 /* --- Tabelas de Alta Densidade e Legibilidade --- */

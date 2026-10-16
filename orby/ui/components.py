@@ -119,6 +119,7 @@ class MetricCard(QFrame):
         self.icon_widget = IconWidget(icon_name, size=ICON_SIZES.LG)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("MetricTitle")
+        self.title_label.setToolTip(title)
 
         header_layout.addWidget(self.icon_widget)
         header_layout.addWidget(self.title_label)
@@ -126,6 +127,7 @@ class MetricCard(QFrame):
 
         self.value_label = QLabel(initial_value)
         self.value_label.setObjectName("MetricValue")
+        self.value_label.setToolTip(initial_value)
 
         layout.addLayout(header_layout)
         layout.addWidget(self.value_label)
@@ -133,6 +135,7 @@ class MetricCard(QFrame):
 
     def set_value(self, value: str) -> None:
         self.value_label.setText(value)
+        self.value_label.setToolTip(value)
 
 
 class StatusBadge(QLabel):
@@ -202,6 +205,11 @@ class ModernTableWidget(QTableWidget):
         self.horizontalHeader().setFixedHeight(DIMENSIONS.TABLE_HEADER_HEIGHT)
         self.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.horizontalHeader().setHighlightSections(False)
+
+    def setItem(self, row: int, column: int, item: QTableWidgetItem) -> None:
+        if item and not item.toolTip():
+            item.setToolTip(item.text())
+        super().setItem(row, column, item)
 
 
 class TimelineDialog(QDialog):
