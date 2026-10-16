@@ -4,7 +4,7 @@ Sistema desktop intuitivo e de alta performance voltado para pequenas empresas, 
 
 ---
 
-## 🚀 Funcionalidades
+##  Funcionalidades
 
 - **Autenticação & Controle de Acesso (RBAC):**
   - **Gestor:** Acesso irrestrito (dashboard financeiro, clientes, equipamentos, OS e importação).
@@ -27,7 +27,7 @@ Sistema desktop intuitivo e de alta performance voltado para pequenas empresas, 
 
 ---
 
-## 👥 Credenciais de Acesso (Ambiente de Testes)
+##  Credenciais de Acesso (Ambiente de Testes)
 
 O sistema inicializa automaticamente o banco de dados `orby.db` com três perfis pré-configurados para validação:
 
@@ -39,7 +39,7 @@ O sistema inicializa automaticamente o banco de dados `orby.db` com três perfis
 
 ---
 
-## 💻 Como Executar o Projeto
+##  Como Executar o Projeto
 
 ### Pré-requisitos
 - **Python 3.11** ou superior
@@ -77,11 +77,11 @@ python main.py
 
 > **Nota:** O banco de dados SQLite (`orby.db`) é criado e populado automaticamente na primeira execução dentro do diretório de dados do usuário (`%APPDATA%/Orby/orby.db` no Windows ou `~/.orby/` no Linux/macOS), sem poluir a pasta do projeto.
 >
-> 💡 **Usuários Windows:** Um executável portátil pronto para uso (`Orby.exe`, que dispensa instalação do Python) está disponível para download direto na aba [Releases](https://github.com/luisa-moura/Orby-SO-Platform/releases) do repositório.
+>  **Usuários Windows:** Um executável portátil pronto para uso (`Orby.exe`, que dispensa instalação do Python) está disponível para download direto na aba [Releases](https://github.com/luisa-moura/Orby-SO-Platform/releases) do repositório.
 
 ---
 
-## 🧪 Executando os Testes Automatizados
+##  Executando os Testes Automatizados
 
 A suíte possui 23 testes unitários cobrindo autenticação, controle RBAC, persistência, regras de negócio e importação. Você pode executá-los com o `unittest` padrão ou com o `pytest`:
 
@@ -98,7 +98,7 @@ python -m pytest
 
 ---
 
-## 📦 Estrutura do Projeto
+##  Estrutura do Projeto
 
 ```text
 ├── orby/                    # Módulo principal da aplicação
