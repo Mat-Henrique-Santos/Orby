@@ -47,22 +47,22 @@ O sistema inicializa automaticamente o banco de dados `orby.db` com três perfis
 
 ### 1. Clonar o repositório
 ```bash
-git clone https://github.com/SEU_USUARIO/orby.git
-cd orby
+git clone https://github.com/luisa-moura/Orby-SO-Platform.git
+cd Orby-SO-Platform
 ```
 
 ### 2. Criar e ativar o ambiente virtual (recomendado)
 
 No Windows (PowerShell):
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 ```
 
 No Linux/macOS:
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ### 3. Instalar as dependências
@@ -75,16 +75,25 @@ pip install -r requirements.txt
 python main.py
 ```
 
-> **Nota:** O banco de dados SQLite (`orby.db`) é criado e populado automaticamente na primeira execução dentro do diretório de dados do usuário (`%APPDATA%/Orby/orby.db` no Windows ou `~/.orby/` no Linux/macOS), mantendo seus arquivos e pastas organizados.
+> **Nota:** O banco de dados SQLite (`orby.db`) é criado e populado automaticamente na primeira execução dentro do diretório de dados do usuário (`%APPDATA%/Orby/orby.db` no Windows ou `~/.orby/` no Linux/macOS), sem poluir a pasta do projeto.
+>
+> 💡 **Usuários Windows:** Um executável portátil pronto para uso (`Orby.exe`, que dispensa instalação do Python) está disponível para download direto na aba [Releases](https://github.com/luisa-moura/Orby-SO-Platform/releases) do repositório.
 
 ---
 
-## 🧪 Executando os Testes Unitários
+## 🧪 Executando os Testes Automatizados
 
-Para rodar a suíte completa de testes automatizados:
+A suíte possui 23 testes unitários cobrindo autenticação, controle RBAC, persistência, regras de negócio e importação. Você pode executá-los com o `unittest` padrão ou com o `pytest`:
 
+**Via unittest nativo:**
 ```bash
 python -m unittest discover tests
+```
+
+**Via pytest:**
+```bash
+pip install pytest
+python -m pytest
 ```
 
 ---
