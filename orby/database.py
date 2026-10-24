@@ -1,7 +1,11 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 import hashlib
 import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 
 def get_default_db_path() -> str:
@@ -26,7 +30,34 @@ def verify_password(password: str, hashed: str) -> bool:
     return hash_password(password) == hashed
 
 
-class Database:
+class DatabaseBackend(ABC):
+    """
+    Interface abstrata para desacoplar a camada de persistência.
+    Permite alternar entre SQLite local e bancos relacionais em rede/nuvem (PostgreSQL, MySQL).
+    """
+
+    @abstractmethod
+    def connect(self) -> Any:
+        """Retorna uma conexão ativa compatível com o padrão DB-API 2.0 (PEP 249)."""
+        pass
+
+    @abstractmethod
+    def initialize(self) -> None:
+        """Cria tabelas, índices e executa migrações necessárias."""
+        pass
+
+    @abstractmethod
+    def backup(self, destination: str | None = None, compress: bool = True) -> str:
+        """Executa rotina de backup da base de dados."""
+        pass
+
+    @abstractmethod
+    def restore(self, source: str) -> dict:
+        """Restaura a base de dados a partir de uma cópia de segurança."""
+        pass
+
+
+class Database(DatabaseBackend):
     def __init__(self, path: str | None = None) -> None:
         self.path = path or get_default_db_path()
 
@@ -35,6 +66,32 @@ class Database:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
+
+    def backup(self, destination: str | None = None, compress: bool = True) -> str:
+        from .core.backup import BackupManager
+        manager = BackupManager(db_path=self.path)
+        return str(manager.create_backup(destination_path=destination, compress=compress))
+
+    def restore(self, source: str) -> dict:
+        from .core.backup import BackupManager
+        manager = BackupManager(db_path=self.path)
+        res = manager.restore_backup(source)
+        self.initialize()
+        return res
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        with self.connect() as db:
+            row = db.execute("SELECT valor FROM configuracoes WHERE chave = ?", (key,)).fetchone()
+            return str(row["valor"]) if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                """INSERT INTO configuracoes (chave, valor, atualizado_em)
+                   VALUES (?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = CURRENT_TIMESTAMP""",
+                (key, str(value)),
+            )
 
     def initialize(self) -> None:
         with self.connect() as db:
@@ -102,6 +159,12 @@ class Database:
                     perfil TEXT NOT NULL CHECK(perfil IN ('Gestor', 'Técnico', 'Atendente')),
                     ativo INTEGER NOT NULL DEFAULT 1,
                     criado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS configuracoes (
+                    chave TEXT PRIMARY KEY,
+                    valor TEXT NOT NULL,
+                    atualizado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 );
                 """
             )
@@ -183,3 +246,26 @@ class Database:
             DROP TABLE ordens_servico_anterior;
             """
         )
+
+
+def create_database(engine: str = "sqlite", **kwargs: Any) -> DatabaseBackend:
+    """
+    Fábrica para instanciar backends de banco de dados.
+    Pronto para conectar ao SQLite local ou a instâncias remotas (PostgreSQL / MySQL)
+    sem que o restante da aplicação ou repositório precise ser reescrito.
+    """
+    engine_normalized = engine.lower().strip()
+    if engine_normalized in ("sqlite", "sqlite3", "local"):
+        return Database(path=kwargs.get("path"))
+    elif engine_normalized in ("postgres", "postgresql", "pg"):
+        raise NotImplementedError(
+            "O backend PostgreSQL está preparado na arquitetura DatabaseBackend e requer o driver 'psycopg2' ou 'asyncpg'. "
+            "Para utilizá-lo em modo cloud, instale as dependências e implemente a subclasse PostgresDatabase(DatabaseBackend)."
+        )
+    elif engine_normalized in ("mysql", "mariadb"):
+        raise NotImplementedError(
+            "O backend MySQL está preparado na arquitetura DatabaseBackend e requer 'mysql-connector-python'. "
+            "Implemente a subclasse MySQLDatabase(DatabaseBackend)."
+        )
+    else:
+        raise ValueError(f"Motor de banco de dados não suportado: {engine}")

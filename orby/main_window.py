@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QLocale, QSize, Qt
+from PySide6.QtCore import QLocale, QSize, Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QCheckBox,
     QApplication,
     QComboBox,
     QDialog,
@@ -33,6 +35,7 @@ from .core.models import (
     validar_email,
     validar_telefone,
 )
+from .core.backup import BackupManager, InvalidBackupFileError
 from .importer import read_table, validate_customers
 from .repository import PermissionDeniedError, Repository
 from .ui.components import (
@@ -642,6 +645,7 @@ class MainWindow(QMainWindow):
             ("Clientes", "users", 2),
             ("Equipamentos", "laptop", 3),
             ("Ordens de Serviço", "clipboard", 4),
+            ("Configurações", "settings", 5),
         ]
 
         for text, icon_name, index in nav_items:
@@ -727,6 +731,7 @@ class MainWindow(QMainWindow):
         self.pages.addWidget(self.make_customers())
         self.pages.addWidget(self.make_equipment())
         self.pages.addWidget(self.make_orders())
+        self.pages.addWidget(self.make_settings())
 
         content_layout.addWidget(self.pages)
         body_layout.addWidget(content_area, 1)
@@ -775,12 +780,16 @@ class MainWindow(QMainWindow):
             self.nav_buttons[1].setVisible(False)  # Financeiro
             self.nav_buttons[2].setVisible(False)  # Clientes
             self.btn_import.setVisible(False)
+            if len(self.nav_buttons) > 5:
+                self.nav_buttons[5].setVisible(False)  # Configurações (Gestor exclusivo)
             if hasattr(self, "delete_equipment_btn"):
                 self.delete_equipment_btn.setVisible(False)
             if hasattr(self, "delete_order_btn"):
                 self.delete_order_btn.setVisible(False)
         elif self.perfil == "Atendente":
             self.nav_buttons[1].setVisible(False)  # Financeiro
+            if len(self.nav_buttons) > 5:
+                self.nav_buttons[5].setVisible(False)  # Configurações (Gestor exclusivo)
             if hasattr(self, "delete_customer_btn"):
                 self.delete_customer_btn.setVisible(False)
             if hasattr(self, "delete_equipment_btn"):
@@ -830,6 +839,8 @@ class MainWindow(QMainWindow):
             self.refresh_equipment()
         elif index == 4:
             self.refresh_orders()
+        elif index == 5:
+            self.refresh_settings()
 
     def make_dashboard(self) -> QWidget:
         page = QWidget()
@@ -1440,3 +1451,272 @@ class MainWindow(QMainWindow):
             self.refresh_all()
         except PermissionDeniedError as error:
             QMessageBox.critical(self, "Acesso Negado", str(error))
+
+    def closeEvent(self, event) -> None:
+        try:
+            auto_bck = self.repository.database.get_setting("auto_backup_on_exit", "true").lower() == "true"
+            if auto_bck:
+                manager = BackupManager(db_path=self.repository.database.path)
+                manager.perform_auto_backup_on_exit()
+        except Exception:
+            pass
+        event.accept()
+
+    def make_settings(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACING.MD + 2)
+
+        # Cabeçalho da Seção de Configurações
+        header_card = ContentCard()
+        h_layout = QHBoxLayout(header_card)
+        h_layout.setContentsMargins(SPACING.LG + 2, SPACING.MD, SPACING.LG + 2, SPACING.MD)
+        h_layout.setSpacing(SPACING.MD)
+
+        title_box = QVBoxLayout()
+        title_box.setSpacing(SPACING.XXS)
+        title = QLabel("Configurações & Segurança dos Dados")
+        title.setObjectName("SectionTitle")
+        subtitle = QLabel("Gestão de Backups, Restauração de Dados e Preferências do Banco Local")
+        subtitle.setObjectName("SummaryLabel")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        h_layout.addLayout(title_box)
+        h_layout.addStretch()
+
+        btn_folder = QPushButton("Abrir Pasta de Backups")
+        btn_folder.setIcon(get_icon("database", size=ICON_SIZES.SM))
+        btn_folder.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_folder.clicked.connect(self.open_backup_folder)
+        h_layout.addWidget(btn_folder)
+
+        layout.addWidget(header_card)
+
+        # Informações do Banco de Dados Atual
+        db_card = ContentCard()
+        db_layout = QVBoxLayout(db_card)
+        db_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        db_layout.setSpacing(SPACING.SM + 2)
+
+        db_title = QLabel("Status do Banco de Dados Ativo (SQLite)")
+        db_title.setObjectName("SectionSubtitle")
+        db_layout.addWidget(db_title)
+
+        self.lbl_db_path = QLabel("Localização: %APPDATA%/Orby/orby.db")
+        self.lbl_db_path.setStyleSheet("font-family: Consolas, monospace; color: #0284c7; font-weight: bold;")
+        db_layout.addWidget(self.lbl_db_path)
+
+        self.lbl_db_stats = QLabel("Tamanho: Calculando... • Última Modificação: Calculando...")
+        self.lbl_db_stats.setObjectName("SummaryLabel")
+        db_layout.addWidget(self.lbl_db_stats)
+
+        self.lbl_db_counts = QLabel("Clientes: 0 • Equipamentos: 0 • Ordens de Serviço: 0 • Usuários: 0")
+        self.lbl_db_counts.setObjectName("SummaryLabel")
+        db_layout.addWidget(self.lbl_db_counts)
+
+        layout.addWidget(db_card)
+
+        # Painel Operacional de Backup & Restauração
+        action_card = ContentCard()
+        action_layout = QVBoxLayout(action_card)
+        action_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        action_layout.setSpacing(SPACING.MD)
+
+        act_title = QLabel("Rotinas de Backup e Proteção")
+        act_title.setObjectName("SectionSubtitle")
+        action_layout.addWidget(act_title)
+
+        btns_layout = QHBoxLayout()
+        btns_layout.setSpacing(SPACING.MD)
+
+        btn_backup_manual = QPushButton("Fazer Backup Manual (.zip / .db)")
+        btn_backup_manual.setObjectName("PrimaryButton")
+        btn_backup_manual.setIcon(get_icon("file-up", color="#ffffff", size=ICON_SIZES.SM))
+        btn_backup_manual.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_backup_manual.clicked.connect(self.do_manual_backup)
+        btns_layout.addWidget(btn_backup_manual)
+
+        btn_backup_quick = QPushButton("Backup Rápido (1 Clique)")
+        btn_backup_quick.setIcon(get_icon("shield", size=ICON_SIZES.SM))
+        btn_backup_quick.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_backup_quick.clicked.connect(self.do_quick_backup)
+        btns_layout.addWidget(btn_backup_quick)
+
+        btn_restore = QPushButton("Restaurar Cópia de Segurança...")
+        btn_restore.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
+        btn_restore.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_restore.clicked.connect(lambda: self.do_restore_backup())
+        btns_layout.addWidget(btn_restore)
+
+        btns_layout.addStretch()
+        action_layout.addLayout(btns_layout)
+
+        # Checkbox de Backup Automático na Saída
+        self.chk_auto_backup = QCheckBox("Criar cópia de segurança automática (.zip) na pasta padrão sempre que o sistema for fechado")
+        auto_enabled = self.repository.database.get_setting("auto_backup_on_exit", "true").lower() == "true"
+        self.chk_auto_backup.setChecked(auto_enabled)
+        self.chk_auto_backup.stateChanged.connect(self.on_auto_backup_toggled)
+        action_layout.addWidget(self.chk_auto_backup)
+
+        layout.addWidget(action_card)
+
+        # Tabela de Histórico de Backups Salvos
+        table_card = ContentCard()
+        table_layout = QVBoxLayout(table_card)
+        table_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        table_layout.setSpacing(SPACING.MD)
+
+        th_box = QHBoxLayout()
+        t_title = QLabel("Cópias de Segurança Disponíveis na Pasta Padrão")
+        t_title.setObjectName("SectionSubtitle")
+        th_box.addWidget(t_title)
+        th_box.addStretch()
+        btn_refresh_bck = QPushButton("Atualizar Lista")
+        btn_refresh_bck.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
+        btn_refresh_bck.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_refresh_bck.clicked.connect(self.refresh_settings)
+        th_box.addWidget(btn_refresh_bck)
+        table_layout.addLayout(th_box)
+
+        self.backup_table = ModernTableWidget(0, 5)
+        self.backup_table.setHorizontalHeaderLabels(["Arquivo de Backup", "Data / Hora", "Tamanho", "Formato", "Ação"])
+        self.backup_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.backup_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.backup_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.backup_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.backup_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        table_layout.addWidget(self.backup_table)
+
+        layout.addWidget(table_card, 1)
+        return page
+
+    def refresh_settings(self) -> None:
+        manager = BackupManager(db_path=self.repository.database.path)
+        info = manager.get_database_info()
+
+        if hasattr(self, "lbl_db_path"):
+            self.lbl_db_path.setText(f"Caminho do Arquivo: {info['path']}")
+            self.lbl_db_stats.setText(f"Tamanho em Disco: {info['size_formatted']} • Última Modificação: {info['last_modified']}")
+            counts = info.get("counts", {})
+            self.lbl_db_counts.setText(
+                f"Clientes: {counts.get('clientes', 0)} • "
+                f"Equipamentos: {counts.get('equipamentos', 0)} • "
+                f"Ordens de Serviço: {counts.get('ordens_servico', 0)} • "
+                f"Usuários: {counts.get('usuarios', 0)}"
+            )
+
+        if hasattr(self, "backup_table"):
+            backups = manager.list_backups()
+            self.backup_table.setRowCount(0)
+            for b in backups:
+                row = self.backup_table.rowCount()
+                self.backup_table.insertRow(row)
+                self.backup_table.setItem(row, 0, QTableWidgetItem(b["filename"]))
+                self.backup_table.setItem(row, 1, QTableWidgetItem(b["date_formatted"]))
+                self.backup_table.setItem(row, 2, QTableWidgetItem(b["size_formatted"]))
+                fmt = "Compactado (.zip)" if b["is_compressed"] else "Banco SQLite (.db)"
+                self.backup_table.setItem(row, 3, QTableWidgetItem(fmt))
+
+                btn_rst = QPushButton("Restaurar")
+                btn_rst.setObjectName("SecondaryButton")
+                btn_rst.clicked.connect(lambda checked=False, p=b["path"]: self.do_restore_backup(p))
+                self.backup_table.setCellWidget(row, 4, btn_rst)
+
+    def do_manual_backup(self) -> None:
+        manager = BackupManager(db_path=self.repository.database.path)
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        default_name = f"orby_backup_{timestamp}.zip"
+        default_target = os.path.join(str(manager.get_backup_dir()), default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Salvar Cópia de Segurança do Orby",
+            default_target,
+            "Arquivo Compactado (*.zip);;Banco de Dados SQLite (*.db)",
+        )
+        if not path:
+            return
+
+        try:
+            compress = path.lower().endswith(".zip")
+            saved_path = manager.create_backup(destination_path=path, compress=compress)
+            QMessageBox.information(
+                self,
+                "Backup Realizado com Sucesso",
+                f"A cópia de segurança foi gerada com sucesso!\n\nArquivo: {os.path.basename(saved_path)}\nLocal: {saved_path}",
+            )
+            self.refresh_settings()
+        except Exception as e:
+            QMessageBox.critical(self, "Erro no Backup", f"Não foi possível gerar a cópia de segurança:\n{e}")
+
+    def do_quick_backup(self) -> None:
+        try:
+            manager = BackupManager(db_path=self.repository.database.path)
+            saved_path = manager.create_backup(compress=True)
+            QMessageBox.information(
+                self,
+                "Backup Rápido Concluído",
+                f"Cópia de segurança compactada criada com sucesso na pasta padrão!\n\nArquivo: {os.path.basename(saved_path)}",
+            )
+            self.refresh_settings()
+        except Exception as e:
+            QMessageBox.critical(self, "Erro no Backup", f"Falha no backup rápido:\n{e}")
+
+    def do_restore_backup(self, file_path: str | None = None) -> None:
+        manager = BackupManager(db_path=self.repository.database.path)
+        if not file_path:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Selecionar Arquivo de Backup para Restauração",
+                str(manager.get_backup_dir()),
+                "Backups do Orby (*.zip *.db);;Todos os Arquivos (*.*)",
+            )
+        if not file_path:
+            return
+
+        try:
+            val = manager.validate_backup(file_path)
+            counts = val.get("counts", {})
+            msg = (
+                f"Tem certeza que deseja restaurar este backup?\n\n"
+                f"Arquivo: {os.path.basename(file_path)}\n"
+                f"Tamanho: {val['size_formatted']}\n"
+                f"Registros encontrados:\n"
+                f"  • Clientes: {counts.get('clientes', 0)}\n"
+                f"  • Equipamentos: {counts.get('equipamentos', 0)}\n"
+                f"  • Ordens de Serviço: {counts.get('ordens_servico', 0)}\n\n"
+                f"⚠️ ATENÇÃO: Os dados atuais serão substituídos pelos do backup. "
+                f"Um snapshot de emergência do banco atual será gerado automaticamente antes de prosseguir."
+            )
+            reply = QMessageBox.warning(
+                self,
+                "Confirmar Restauração de Dados",
+                msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+            manager.restore_backup(file_path)
+            QMessageBox.information(
+                self,
+                "Restauração Concluída",
+                "O sistema foi restaurado com sucesso! Todos os dados e migrações foram atualizados.",
+            )
+            self.refresh_all()
+        except InvalidBackupFileError as e:
+            QMessageBox.critical(self, "Backup Inválido", f"O arquivo selecionado não é um backup válido:\n{e}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Restauração", f"Falha ao restaurar backup:\n{e}")
+
+    def open_backup_folder(self) -> None:
+        manager = BackupManager(db_path=self.repository.database.path)
+        folder = manager.get_backup_dir()
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def on_auto_backup_toggled(self, state: int) -> None:
+        enabled = (state == Qt.CheckState.Checked.value or state == 2)
+        self.repository.database.set_setting("auto_backup_on_exit", "true" if enabled else "false")

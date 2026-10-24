@@ -410,6 +410,30 @@ QHeaderView::section {{
     border-bottom: 2px solid {c.PRIMARY};
 }}
 
+/* --- CheckBox Estilizado --- */
+QCheckBox {{
+    font-size: {TYPOGRAPHY.SIZE_BODY}px;
+    color: {c.TEXT_PRIMARY};
+    spacing: {SPACING.SM}px;
+}}
+
+QCheckBox::indicator {{
+    width: 18px;
+    height: 18px;
+    border-radius: {RADIUS.SM}px;
+    border: 1px solid {c.BORDER};
+    background: {c.SURFACE_ELEVATED};
+}}
+
+QCheckBox::indicator:hover {{
+    border-color: {c.PRIMARY};
+}}
+
+QCheckBox::indicator:checked {{
+    background: {c.PRIMARY};
+    border-color: {c.PRIMARY_ACTIVE};
+}}
+
 /* --- Scrollbars --- */
 QScrollBar:vertical {{
     border: none;
