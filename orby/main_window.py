@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import re
+
 from PySide6.QtCore import QLocale, QSize, Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
@@ -40,6 +43,7 @@ from .core.backup import BackupManager, InvalidBackupFileError
 from .importer import read_table, validate_customers
 from .repository import PermissionDeniedError, Repository
 from .ui.user_dialog import UserDialog, PasswordDialog
+from .ui.equipment_history_dialog import EquipmentHistoryDialog
 from .ui.components import (
     ContentCard,
     MetricCard,
@@ -973,6 +977,7 @@ class MainWindow(QMainWindow):
 
         self.dash_table = ModernTableWidget(0, 6)
         self.dash_table.setHorizontalHeaderLabels(["OS", "Cliente", "Equipamento", "Status", "Valor Total", "Abertura"])
+        self.dash_table.cellDoubleClicked.connect(lambda *_: self.edit_order_from_dashboard())
         table_layout.addWidget(self.dash_table)
 
         layout.addWidget(table_card, 1)
@@ -1356,6 +1361,7 @@ class MainWindow(QMainWindow):
             if item.get("em_atraso"):
                 os_txt += " ⚠️"
             os_item = QTableWidgetItem(os_txt)
+            os_item.setData(Qt.UserRole, int(item["id"]))
             if item.get("em_atraso"):
                 os_item.setToolTip(f"⚠️ ATENÇÃO: Parada há {item.get('dias_parada', 0)} dias sem atualização de status!")
             self.dash_table.setItem(row, 0, os_item)
@@ -1409,7 +1415,9 @@ class MainWindow(QMainWindow):
         for item in rows:
             row = self.customer_table.rowCount()
             self.customer_table.insertRow(row)
-            self.customer_table.setItem(row, 0, QTableWidgetItem(str(item["id"])))
+            id_item = QTableWidgetItem(str(item["id"]))
+            id_item.setData(Qt.UserRole, int(item["id"]))
+            self.customer_table.setItem(row, 0, id_item)
             self.customer_table.setItem(row, 1, QTableWidgetItem(item["nome"]))
             self.customer_table.setItem(row, 2, QTableWidgetItem(item["telefone"]))
             self.customer_table.setItem(row, 3, QTableWidgetItem(item.get("email") or "—"))
@@ -1428,6 +1436,7 @@ class MainWindow(QMainWindow):
             if item.get("em_atraso"):
                 os_txt += " ⚠️"
             os_item = QTableWidgetItem(os_txt)
+            os_item.setData(Qt.UserRole, int(item["id"]))
             if item.get("em_atraso"):
                 os_item.setToolTip(f"⚠️ ATENÇÃO: Esta OS está aberta há {item.get('dias_parada', 0)} dias sem movimentação de status!")
             self.order_table.setItem(row, 0, os_item)
@@ -1459,7 +1468,9 @@ class MainWindow(QMainWindow):
             row = self.equipment_table.rowCount()
             self.equipment_table.insertRow(row)
             marca_modelo = " ".join(p for p in [item.get("marca"), item.get("modelo")] if p)
-            self.equipment_table.setItem(row, 0, QTableWidgetItem(str(item["id"])))
+            id_item = QTableWidgetItem(str(item["id"]))
+            id_item.setData(Qt.UserRole, int(item["id"]))
+            self.equipment_table.setItem(row, 0, id_item)
             self.equipment_table.setItem(row, 1, QTableWidgetItem(item["cliente_nome"]))
             self.equipment_table.setItem(row, 2, QTableWidgetItem(item["tipo"]))
             self.equipment_table.setItem(row, 3, QTableWidgetItem(marca_modelo or "—"))
@@ -1468,7 +1479,6 @@ class MainWindow(QMainWindow):
     def show_selected_order_equipment_history(self) -> None:
         order_id = self.selected_id(self.order_table)
         if not order_id:
-            QMessageBox.warning(self, "Atenção", "Selecione uma Ordem de Serviço na tabela.")
             return
         order = self.repository.order(order_id)
         if not order or not order.get("equipamento_id"):
@@ -1482,14 +1492,12 @@ class MainWindow(QMainWindow):
             return
 
         history = self.repository.orders_by_equipment(eq_id)
-        from .ui.equipment_history_dialog import EquipmentHistoryDialog
         dlg = EquipmentHistoryDialog(eq, history, self)
         dlg.exec()
 
     def show_equipment_orders_history(self) -> None:
         eq_id = self.selected_id(self.equipment_table)
         if not eq_id:
-            QMessageBox.warning(self, "Atenção", "Selecione um equipamento na tabela.")
             return
 
         eq = self.repository.single_equipment(eq_id)
@@ -1498,7 +1506,6 @@ class MainWindow(QMainWindow):
             return
 
         history = self.repository.orders_by_equipment(eq_id)
-        from .ui.equipment_history_dialog import EquipmentHistoryDialog
         dlg = EquipmentHistoryDialog(eq, history, self)
         dlg.exec()
 
@@ -1520,13 +1527,58 @@ class MainWindow(QMainWindow):
             except ValueError as error:
                 QMessageBox.warning(self, "Equipamento Inválido", str(error))
 
+    def edit_order_from_dashboard(self) -> None:
+        item_id = self.selected_id(self.dash_table)
+        if item_id is None:
+            return
+        order = self.repository.order(item_id)
+        if not order:
+            return
+        dialog = OrderDialog(self, self.repository.customers(), order)
+        if dialog.exec():
+            try:
+                self.repository.update_order(item_id, *dialog.values())
+                self.refresh_all()
+            except PermissionDeniedError as error:
+                QMessageBox.critical(self, "Acesso Negado", str(error))
+            except ValueError as error:
+                QMessageBox.warning(self, "OS Inválida", str(error))
+
     def selected_id(self, table: QTableWidget) -> int | None:
         row = table.currentRow()
         if row < 0:
-            QMessageBox.information(self, "Seleção necessária", "Por favor, selecione um registro na tabela.")
+            selected_items = table.selectedItems()
+            if selected_items:
+                row = selected_items[0].row()
+            else:
+                selected_indexes = table.selectedIndexes()
+                if selected_indexes:
+                    row = selected_indexes[0].row()
+
+        if row < 0 or row >= table.rowCount():
+            QMessageBox.information(self, "Seleção Necessária", "Por favor, selecione uma linha na tabela para continuar.")
             return None
-        text = table.item(row, 0).text().replace("OS-", "")
-        return int(text)
+
+        item = table.item(row, 0)
+        if not item:
+            return None
+
+        # 1. Recupera ID armazenado diretamente em UserRole
+        val = item.data(Qt.UserRole)
+        if val is not None:
+            try:
+                return int(val)
+            except (ValueError, TypeError):
+                pass
+
+        # 2. Extrai dígitos mesmo com prefixo ('OS-'), sufixos e emojis ('⚠️')
+        raw_text = item.text().strip()
+        match = re.search(r"\d+", raw_text)
+        if match:
+            return int(match.group(0))
+
+        QMessageBox.warning(self, "Registro Inválido", "Não foi possível identificar o código do registro selecionado.")
+        return None
 
     def add_customer(self) -> None:
         dialog = CustomerDialog(self)
@@ -2398,7 +2450,6 @@ class MainWindow(QMainWindow):
     def print_entry_receipt(self) -> None:
         item_id = self.selected_id(self.order_table)
         if item_id is None:
-            QMessageBox.information(self, "Selecionar OS", "Por favor, selecione uma Ordem de Serviço na tabela para emitir o comprovante.")
             return
         self.print_entry_receipt_by_id(item_id)
 
@@ -2442,7 +2493,6 @@ class MainWindow(QMainWindow):
     def print_exit_receipt(self) -> None:
         item_id = self.selected_id(self.order_table)
         if item_id is None:
-            QMessageBox.information(self, "Selecionar OS", "Por favor, selecione uma Ordem de Serviço na tabela para emitir o recibo de saída.")
             return
         self.print_exit_receipt_by_id(item_id)
 
