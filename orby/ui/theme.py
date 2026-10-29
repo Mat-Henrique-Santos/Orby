@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication
 
 from .tokens import (
@@ -435,7 +435,10 @@ QCheckBox::indicator:checked {{
 }}
 
 /* --- Scrollbars e Áreas de Rolagem --- */
-QScrollArea {{
+QScrollArea,
+QScrollArea#PageScrollArea,
+QScrollArea > QWidget#qt_scrollarea_viewport,
+QWidget#PageScrollContent {{
     background: transparent;
     border: none;
 }}
@@ -489,6 +492,22 @@ def apply_frutiger_aero_theme(app: QApplication, dark_mode: bool = False) -> Non
     font = QFont("Segoe UI", TYPOGRAPHY.SIZE_SMALL - 2)
     app.setFont(font)
     palette = DARK_PALETTE if dark_mode else LIGHT_PALETTE
+
+    # Sincroniza a QPalette do sistema com o tema Frutiger Aero, evitando vazamentos de fundo preto do Windows
+    app_palette = QPalette()
+    app_palette.setColor(QPalette.Window, QColor(palette.WINDOW_GRADIENT_START))
+    app_palette.setColor(QPalette.WindowText, QColor(palette.TEXT_PRIMARY))
+    app_palette.setColor(QPalette.Base, QColor(palette.SURFACE_ELEVATED))
+    app_palette.setColor(QPalette.AlternateBase, QColor(palette.WINDOW_GRADIENT_MID1))
+    app_palette.setColor(QPalette.ToolTipBase, QColor(palette.SURFACE_ELEVATED))
+    app_palette.setColor(QPalette.ToolTipText, QColor(palette.TEXT_PRIMARY))
+    app_palette.setColor(QPalette.Text, QColor(palette.TEXT_PRIMARY))
+    app_palette.setColor(QPalette.Button, QColor(palette.SURFACE_ELEVATED))
+    app_palette.setColor(QPalette.ButtonText, QColor(palette.TEXT_PRIMARY))
+    app_palette.setColor(QPalette.Highlight, QColor(palette.PRIMARY))
+    app_palette.setColor(QPalette.HighlightedText, QColor(palette.TEXT_ON_PRIMARY))
+    app.setPalette(app_palette)
+
     qss = generate_qss(palette)
     app.setStyleSheet(qss)
 

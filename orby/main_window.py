@@ -800,12 +800,31 @@ class MainWindow(QMainWindow):
     def _wrap_scroll(self, widget: QWidget) -> QScrollArea:
         """Envolve uma página em QScrollArea para permitir rolagem suave em resoluções menores (1024x600 / 1366x768)."""
         scroll = QScrollArea()
+        scroll.setObjectName("PageScrollArea")
+        widget.setObjectName("PageScrollContent")
         scroll.setWidget(widget)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+
+        # Desativa autoFillBackground que causava fundo preto em sistemas com Windows Dark Mode
+        scroll.setAutoFillBackground(False)
+        scroll.setAttribute(Qt.WA_TranslucentBackground, True)
+        if scroll.viewport():
+            scroll.viewport().setAutoFillBackground(False)
+            scroll.viewport().setAttribute(Qt.WA_TranslucentBackground, True)
+            scroll.viewport().setStyleSheet("background: transparent; border: none;")
+
+        scroll.setStyleSheet(
+            "QScrollArea#PageScrollArea, "
+            "QScrollArea#PageScrollArea > QWidget#qt_scrollarea_viewport, "
+            "QWidget#PageScrollContent { "
+            "   background: transparent; "
+            "   border: none; "
+            "}"
+        )
+        widget.setStyleSheet("background: transparent;")
         return scroll
 
     def update_theme_button_icon(self) -> None:
