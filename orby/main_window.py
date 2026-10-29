@@ -919,6 +919,20 @@ class MainWindow(QMainWindow):
         self.finance_period.currentIndexChanged.connect(self.refresh_finance)
         h_layout.addWidget(self.finance_period)
 
+        btn_export_pdf = QPushButton("Exportar PDF")
+        btn_export_pdf.setIcon(get_icon("chart", size=ICON_SIZES.SM))
+        btn_export_pdf.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_export_pdf.setToolTip("Exportar demonstrativo financeiro e fechamento em PDF")
+        btn_export_pdf.clicked.connect(self.export_finance_pdf)
+        h_layout.addWidget(btn_export_pdf)
+
+        btn_export_csv = QPushButton("Exportar Excel (CSV)")
+        btn_export_csv.setIcon(get_icon("clipboard", size=ICON_SIZES.SM))
+        btn_export_csv.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_export_csv.setToolTip("Exportar extrato analítico para planilha Excel (.csv)")
+        btn_export_csv.clicked.connect(self.export_finance_csv)
+        h_layout.addWidget(btn_export_csv)
+
         layout.addWidget(header_card)
 
         # Cartões de Métricas Financeiras com Ícones Lucide SVG
@@ -1179,8 +1193,22 @@ class MainWindow(QMainWindow):
         self.delete_order_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         self.delete_order_btn.clicked.connect(self.delete_order)
 
+        btn_print_entry = QPushButton("Comprovante de Entrada")
+        btn_print_entry.setIcon(get_icon("file-up", size=ICON_SIZES.SM))
+        btn_print_entry.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_print_entry.setToolTip("Emitir comprovante de entrada para assinatura do cliente")
+        btn_print_entry.clicked.connect(self.print_entry_receipt)
+
+        btn_print_exit = QPushButton("Recibo / Laudo de Saída")
+        btn_print_exit.setIcon(get_icon("circle-check", size=ICON_SIZES.SM))
+        btn_print_exit.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_print_exit.setToolTip("Emitir recibo de saída, laudo técnico e termo de garantia")
+        btn_print_exit.clicked.connect(self.print_exit_receipt)
+
         actions.addWidget(edit_btn)
         actions.addWidget(timeline_btn)
+        actions.addWidget(btn_print_entry)
+        actions.addWidget(btn_print_exit)
         actions.addWidget(self.delete_order_btn)
         actions.addStretch()
         card_layout.addLayout(actions)
@@ -1720,3 +1748,176 @@ class MainWindow(QMainWindow):
     def on_auto_backup_toggled(self, state: int) -> None:
         enabled = (state == Qt.CheckState.Checked.value or state == 2)
         self.repository.database.set_setting("auto_backup_on_exit", "true" if enabled else "false")
+
+    def get_company_info(self) -> dict:
+        db = self.repository.database
+        return {
+            "empresa_nome": db.get_setting("empresa_nome", "Orby Assistência Técnica & Gestão"),
+            "empresa_cnpj": db.get_setting("empresa_cnpj", "00.000.000/0001-00"),
+            "empresa_telefone": db.get_setting("empresa_telefone", "(11) 98765-4321"),
+            "empresa_endereco": db.get_setting("empresa_endereco", "Av. Principal, 100 — Centro"),
+        }
+
+    def print_entry_receipt_by_id(self, item_id: int) -> None:
+        order = self.repository.order(item_id)
+        if not order:
+            return
+
+        customer = self.repository.customer(order["cliente_id"]) or {"nome": order.get("cliente_nome", "Cliente")}
+        equipment = self.repository.single_equipment(order["equipamento_id"]) if order.get("equipamento_id") else None
+        company = self.get_company_info()
+
+        from .core.pdf_generator import generate_entry_receipt, get_default_docs_dir
+
+        default_name = f"Comprovante_Entrada_OS_{item_id:04d}.pdf"
+        default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Salvar Comprovante de Entrada — OS-{item_id:04d}",
+            default_path,
+            "Documento PDF (*.pdf)",
+        )
+        if not path:
+            return
+
+        try:
+            saved_path = generate_entry_receipt(order, customer, equipment, company, output_path=path)
+            reply = QMessageBox.information(
+                self,
+                "Comprovante Gerado",
+                f"Comprovante de Entrada da OS-{item_id:04d} gerado com sucesso!\n\nArquivo: {os.path.basename(saved_path)}\n\nDeseja abrir o documento agora?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved_path)))
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Emissão", f"Falha ao gerar comprovante em PDF:\n{e}")
+
+    def print_entry_receipt(self) -> None:
+        item_id = self.selected_id(self.order_table)
+        if item_id is None:
+            QMessageBox.information(self, "Selecionar OS", "Por favor, selecione uma Ordem de Serviço na tabela para emitir o comprovante.")
+            return
+        self.print_entry_receipt_by_id(item_id)
+
+    def print_exit_receipt_by_id(self, item_id: int) -> None:
+        order = self.repository.order(item_id)
+        if not order:
+            return
+
+        customer = self.repository.customer(order["cliente_id"]) or {"nome": order.get("cliente_nome", "Cliente")}
+        equipment = self.repository.single_equipment(order["equipamento_id"]) if order.get("equipamento_id") else None
+        company = self.get_company_info()
+
+        from .core.pdf_generator import generate_exit_receipt, get_default_docs_dir
+
+        default_name = f"Recibo_Saida_Laudo_OS_{item_id:04d}.pdf"
+        default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            f"Salvar Recibo de Saída e Laudo — OS-{item_id:04d}",
+            default_path,
+            "Documento PDF (*.pdf)",
+        )
+        if not path:
+            return
+
+        try:
+            saved_path = generate_exit_receipt(order, customer, equipment, company, output_path=path)
+            reply = QMessageBox.information(
+                self,
+                "Recibo e Laudo Gerado",
+                f"Recibo de Saída da OS-{item_id:04d} gerado com sucesso!\n\nArquivo: {os.path.basename(saved_path)}\n\nDeseja abrir o documento agora?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved_path)))
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Emissão", f"Falha ao gerar recibo de saída em PDF:\n{e}")
+
+    def print_exit_receipt(self) -> None:
+        item_id = self.selected_id(self.order_table)
+        if item_id is None:
+            QMessageBox.information(self, "Selecionar OS", "Por favor, selecione uma Ordem de Serviço na tabela para emitir o recibo de saída.")
+            return
+        self.print_exit_receipt_by_id(item_id)
+
+    def export_finance_pdf(self) -> None:
+        period = self.finance_period.currentData() or "all"
+        period_text = self.finance_period.currentText()
+        data = self.repository.finance(period)
+        company = self.get_company_info()
+
+        from .core.pdf_generator import generate_financial_report, get_default_docs_dir
+        from datetime import datetime
+
+        ts = datetime.now().strftime("%Y-%m-%d")
+        default_name = f"Relatorio_Financeiro_{period}_{ts}.pdf"
+        default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar Relatório Financeiro (PDF)",
+            default_path,
+            "Documento PDF (*.pdf)",
+        )
+        if not path:
+            return
+
+        try:
+            saved = generate_financial_report(data, period_label=period_text, company=company, output_path=path)
+            reply = QMessageBox.information(
+                self,
+                "Relatório Financeiro Exportado",
+                f"Relatório financeiro ({period_text}) exportado com sucesso!\n\nArquivo: {os.path.basename(saved)}\n\nDeseja visualizar agora?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved)))
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Exportação", f"Falha ao gerar relatório financeiro:\n{e}")
+
+    def export_finance_csv(self) -> None:
+        period = self.finance_period.currentData() or "all"
+        period_text = self.finance_period.currentText()
+        data = self.repository.finance(period)
+        extrato = data.get("extrato", [])
+
+        if not extrato:
+            QMessageBox.information(self, "Extrato Vazio", f"Não há lançamentos de ordens finalizadas para o período '{period_text}'.")
+            return
+
+        from .core.pdf_generator import export_financial_csv, get_default_docs_dir
+        from datetime import datetime
+
+        ts = datetime.now().strftime("%Y-%m-%d")
+        default_name = f"Extrato_Financeiro_{period}_{ts}.csv"
+        default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Exportar Extrato Analítico (Excel / CSV)",
+            default_path,
+            "Planilha CSV (*.csv)",
+        )
+        if not path:
+            return
+
+        try:
+            saved = export_financial_csv(extrato, output_path=path)
+            reply = QMessageBox.information(
+                self,
+                "Extrato Exportado com Sucesso",
+                f"Extrato financeiro com {len(extrato)} registros exportado com sucesso!\n\nArquivo compatível com Microsoft Excel: {os.path.basename(saved)}\n\nDeseja abrir a pasta agora?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if reply == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl.fromLocalFile(str(os.path.dirname(saved))))
+        except Exception as e:
+            QMessageBox.critical(self, "Erro na Exportação", f"Falha ao exportar CSV:\n{e}")
