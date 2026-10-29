@@ -286,7 +286,7 @@ class TypographyTokens:
     FONT_FAMILY_MONO: str = '"Consolas"'
 
     # Tamanhos em pixels (conforme solicitado)
-    SIZE_KPI: int = 28
+    SIZE_KPI: int = 21
     SIZE_TITLE: int = 22
     SIZE_SUBTITLE: int = 16
     SIZE_BODY: int = 13
@@ -315,10 +315,10 @@ class DimensionTokens:
     BUTTON_SMALL_HEIGHT: int = 28
     NAV_BUTTON_HEIGHT: int = 40
     DOCK_TILE_SIZE: int = 38
-    SIDEBAR_WIDTH: int = 240
-    LOGO_SIZE: int = 72
-    METRIC_CARD_MIN_HEIGHT: int = 115
-    METRIC_CARD_MIN_WIDTH: int = 180
+    SIDEBAR_WIDTH: int = 248
+    LOGO_SIZE: int = 54
+    METRIC_CARD_MIN_HEIGHT: int = 96
+    METRIC_CARD_MIN_WIDTH: int = 145
     TABLE_ROW_HEIGHT: int = 36
     TABLE_HEADER_HEIGHT: int = 38
     STATUS_BADGE_HEIGHT: int = 26

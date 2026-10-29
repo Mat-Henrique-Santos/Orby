@@ -434,7 +434,12 @@ QCheckBox::indicator:checked {{
     border-color: {c.PRIMARY_ACTIVE};
 }}
 
-/* --- Scrollbars --- */
+/* --- Scrollbars e Áreas de Rolagem --- */
+QScrollArea {{
+    background: transparent;
+    border: none;
+}}
+
 QScrollBar:vertical {{
     border: none;
     background: {c.SCROLLBAR_BG};
@@ -450,6 +455,31 @@ QScrollBar::handle:vertical {{
 
 QScrollBar::handle:vertical:hover {{
     background: {c.SCROLLBAR_HANDLE_HOVER};
+}}
+
+QScrollBar:horizontal {{
+    border: none;
+    background: {c.SCROLLBAR_BG};
+    height: 8px;
+    border-radius: 4px;
+}}
+
+QScrollBar::handle:horizontal {{
+    background: {c.SCROLLBAR_HANDLE_START};
+    min-width: 24px;
+    border-radius: 4px;
+}}
+
+QScrollBar::handle:horizontal:hover {{
+    background: {c.SCROLLBAR_HANDLE_HOVER};
+}}
+
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical,
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
+    border: none;
+    background: none;
+    width: 0px;
+    height: 0px;
 }}
 """
 

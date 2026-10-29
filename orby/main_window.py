@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -556,6 +557,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Orby — Gestão Operacional para Pequenas Empresas e Serviços")
         self.resize(1300, 840)
+        self.setMinimumSize(960, 540)
 
         root = QWidget()
         root.setObjectName("CentralWidget")
@@ -611,24 +613,27 @@ class MainWindow(QMainWindow):
         body_layout = QHBoxLayout()
         body_layout.setSpacing(SPACING.LG)
 
-        # Barra lateral Frutiger Aero (Estilo Dock)
+        # Barra lateral Frutiger Aero (Estilo Dock com proporções responsivas)
         sidebar = QFrame()
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(DIMENSIONS.SIDEBAR_WIDTH)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(SPACING.LG + 2, SPACING.XL, SPACING.LG + 2, SPACING.LG + 2)
-        sidebar_layout.setSpacing(SPACING.SM + 2)
+        sidebar_layout.setContentsMargins(SPACING.MD, SPACING.LG, SPACING.MD, SPACING.MD)
+        sidebar_layout.setSpacing(SPACING.XS + 2)
 
-        # Topo da Sidebar com Ícone Esférico 3D
+        # Topo da Sidebar com Ícone Esférico 3D adaptativo
         logo_box = QHBoxLayout()
-        logo_box.setSpacing(SPACING.SM + 2)
+        logo_box.setSpacing(SPACING.SM)
         self.orb_logo = OrbLogoWidget()
+        self.orb_logo.setFixedSize(50, 50)
         logo_text_box = QVBoxLayout()
-        logo_text_box.setSpacing(SPACING.XXS)
+        logo_text_box.setSpacing(0)
         logo_title = QLabel("ORBY")
         logo_title.setObjectName("LogoTitle")
+        logo_title.setStyleSheet(f"font-size: 20px; font-weight: {TYPOGRAPHY.WEIGHT_EXTRABOLD}; letter-spacing: 1.5px;")
         logo_sub = QLabel("Gestão & Serviços")
         logo_sub.setObjectName("LogoSubtitle")
+        logo_sub.setStyleSheet(f"font-size: 10px; font-weight: {TYPOGRAPHY.WEIGHT_BOLD}; letter-spacing: 1px;")
         logo_text_box.addWidget(logo_title)
         logo_text_box.addWidget(logo_sub)
         logo_box.addWidget(self.orb_logo)
@@ -636,7 +641,7 @@ class MainWindow(QMainWindow):
         logo_box.addStretch()
 
         sidebar_layout.addLayout(logo_box)
-        sidebar_layout.addSpacing(SPACING.MD)
+        sidebar_layout.addSpacing(SPACING.SM)
 
         # Botões de Navegação em Pílula com Ícones Lucide SVG
         self.nav_buttons: list[QPushButton] = []
@@ -654,6 +659,7 @@ class MainWindow(QMainWindow):
             btn.setObjectName("NavButton")
             btn.setIcon(get_icon(icon_name, size=ICON_SIZES.MD))
             btn.setIconSize(QSize(ICON_SIZES.MD, ICON_SIZES.MD))
+            btn.setFixedHeight(36)
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked=False, i=index: self.open_page(i))
             sidebar_layout.addWidget(btn)
@@ -661,20 +667,22 @@ class MainWindow(QMainWindow):
 
         sidebar_layout.addStretch()
 
-        # Grade Mini Dock de 4 Ícones SVG
+        # Grade Mini Dock de Ações Rápidas (Organizado em 2 linhas harmônicas — sem sobreposição!)
         dock_label = QLabel("AÇÕES RÁPIDAS")
         dock_label.setObjectName("DockSectionLabel")
+        dock_label.setAlignment(Qt.AlignCenter)
         sidebar_layout.addWidget(dock_label)
 
-        dock_grid = QGridLayout()
-        dock_grid.setSpacing(SPACING.SM)
-        dock_grid.setContentsMargins(0, 0, 0, 0)
+        # Linha 1 do Dock: Atualizar, Importar, Alternar Tema
+        dock_row1 = QHBoxLayout()
+        dock_row1.setSpacing(SPACING.SM + 2)
+        dock_row1.setAlignment(Qt.AlignCenter)
 
         btn_refresh = QPushButton()
         btn_refresh.setObjectName("DockTile")
         btn_refresh.setIcon(get_icon("refresh-cw", size=ICON_SIZES.MD))
         btn_refresh.setIconSize(QSize(ICON_SIZES.MD, ICON_SIZES.MD))
-        btn_refresh.setToolTip("Atualizar todos os dados")
+        btn_refresh.setToolTip("Atualizar todos os dados do sistema")
         btn_refresh.clicked.connect(self.refresh_all)
 
         self.btn_import = QPushButton()
@@ -690,6 +698,16 @@ class MainWindow(QMainWindow):
         self.btn_theme.setToolTip("Alternar modo escuro / claro")
         self.btn_theme.clicked.connect(self.toggle_dark_mode)
 
+        dock_row1.addWidget(btn_refresh)
+        dock_row1.addWidget(self.btn_import)
+        dock_row1.addWidget(self.btn_theme)
+        sidebar_layout.addLayout(dock_row1)
+
+        # Linha 2 do Dock: Sobre e Encerrar Sessão
+        dock_row2 = QHBoxLayout()
+        dock_row2.setSpacing(SPACING.SM + 2)
+        dock_row2.setAlignment(Qt.AlignCenter)
+
         btn_about = QPushButton()
         btn_about.setObjectName("DockTile")
         btn_about.setIcon(get_icon("info", size=ICON_SIZES.MD))
@@ -704,13 +722,9 @@ class MainWindow(QMainWindow):
         self.btn_logout.setToolTip("Encerrar Sessão / Trocar Usuário")
         self.btn_logout.clicked.connect(self.logout)
 
-        # Distribuir em linha harmônica com espaçamento perfeito
-        dock_grid.addWidget(btn_refresh, 0, 0)
-        dock_grid.addWidget(self.btn_import, 0, 1)
-        dock_grid.addWidget(self.btn_theme, 0, 2)
-        dock_grid.addWidget(btn_about, 0, 3)
-        dock_grid.addWidget(self.btn_logout, 0, 4)
-        sidebar_layout.addLayout(dock_grid)
+        dock_row2.addWidget(btn_about)
+        dock_row2.addWidget(self.btn_logout)
+        sidebar_layout.addLayout(dock_row2)
 
         sidebar_layout.addSpacing(SPACING.XS)
 
@@ -727,12 +741,12 @@ class MainWindow(QMainWindow):
         content_layout.setContentsMargins(0, 0, 0, 0)
 
         self.pages = QStackedWidget()
-        self.pages.addWidget(self.make_dashboard())
-        self.pages.addWidget(self.make_finance())
+        self.pages.addWidget(self._wrap_scroll(self.make_dashboard()))
+        self.pages.addWidget(self._wrap_scroll(self.make_finance()))
         self.pages.addWidget(self.make_customers())
         self.pages.addWidget(self.make_equipment())
         self.pages.addWidget(self.make_orders())
-        self.pages.addWidget(self.make_settings())
+        self.pages.addWidget(self._wrap_scroll(self.make_settings()))
 
         content_layout.addWidget(self.pages)
         body_layout.addWidget(content_area, 1)
@@ -741,6 +755,17 @@ class MainWindow(QMainWindow):
 
         self._apply_permissions()
         self.open_page(0)
+
+    def _wrap_scroll(self, widget: QWidget) -> QScrollArea:
+        """Envolve uma página em QScrollArea para permitir rolagem suave em resoluções menores (1024x600 / 1366x768)."""
+        scroll = QScrollArea()
+        scroll.setWidget(widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        return scroll
 
     def update_theme_button_icon(self) -> None:
         icon_name = "sun" if is_dark_mode() else "moon"
@@ -957,7 +982,8 @@ class MainWindow(QMainWindow):
 
         # Quadro Formas de Pagamento
         pay_card = ContentCard()
-        pay_card.setFixedWidth(320)
+        pay_card.setMinimumWidth(250)
+        pay_card.setMaximumWidth(320)
         pay_layout = QVBoxLayout(pay_card)
         pay_layout.setContentsMargins(SPACING.LG, SPACING.MD + 2, SPACING.LG, SPACING.MD + 2)
         pay_layout.setSpacing(SPACING.SM + 2)

@@ -30,7 +30,7 @@ from .tokens import DIMENSIONS, ICON_SIZES, RADIUS, SPACING, TYPOGRAPHY
 
 
 class OrbLogoWidget(QWidget):
-    """Logotipo 3D Esférico Frutiger Aero com reflexo vítreo especular gerado com tokens."""
+    """Logotipo 3D Esférico Frutiger Aero com reflexo vítreo especular gerado com tokens e escala adaptativa."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -39,6 +39,10 @@ class OrbLogoWidget(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
+
+        # Escala dinâmica para se ajustar perfeitamente ao tamanho configurado do widget
+        scale_f = min(self.width(), self.height()) / 72.0
+        painter.scale(scale_f, scale_f)
 
         rect = QRectF(4, 4, 64, 64)
 
@@ -95,7 +99,7 @@ class ContentCard(QFrame):
 
 
 class MetricCard(QFrame):
-    """Cartão de KPI/Métrica padronizado com ícone vetorial SVG Lucide."""
+    """Cartão de KPI/Métrica padronizado com ícone vetorial SVG Lucide e escala adaptativa de texto."""
 
     def __init__(
         self,
@@ -110,32 +114,44 @@ class MetricCard(QFrame):
         self.setMinimumWidth(DIMENSIONS.METRIC_CARD_MIN_WIDTH)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(SPACING.LG, SPACING.MD + 2, SPACING.LG, SPACING.MD + 2)
-        layout.setSpacing(SPACING.XS + 2)
+        layout.setContentsMargins(SPACING.MD + 2, SPACING.SM + 2, SPACING.MD + 2, SPACING.SM + 2)
+        layout.setSpacing(SPACING.XXS)
 
         header_layout = QHBoxLayout()
         header_layout.setSpacing(SPACING.SM)
 
-        self.icon_widget = IconWidget(icon_name, size=ICON_SIZES.LG)
+        self.icon_widget = IconWidget(icon_name, size=ICON_SIZES.MD)
         self.title_label = QLabel(title)
         self.title_label.setObjectName("MetricTitle")
         self.title_label.setToolTip(title)
+        self.title_label.setWordWrap(True)
 
         header_layout.addWidget(self.icon_widget)
-        header_layout.addWidget(self.title_label)
-        header_layout.addStretch()
+        header_layout.addWidget(self.title_label, 1)
 
         self.value_label = QLabel(initial_value)
         self.value_label.setObjectName("MetricValue")
         self.value_label.setToolTip(initial_value)
+        self.value_label.setWordWrap(True)
 
         layout.addLayout(header_layout)
         layout.addWidget(self.value_label)
         layout.addStretch()
 
+        self.set_value(initial_value)
+
     def set_value(self, value: str) -> None:
-        self.value_label.setText(value)
-        self.value_label.setToolTip(value)
+        val_str = str(value).strip()
+        self.value_label.setText(val_str)
+        self.value_label.setToolTip(val_str)
+
+        # Ajuste dinâmico de fonte para valores monetários longos não estourarem o cartão em telas menores
+        if len(val_str) > 13:
+            self.value_label.setStyleSheet(f"font-size: 15px; font-weight: {TYPOGRAPHY.WEIGHT_EXTRABOLD};")
+        elif len(val_str) > 9:
+            self.value_label.setStyleSheet(f"font-size: 17px; font-weight: {TYPOGRAPHY.WEIGHT_EXTRABOLD};")
+        else:
+            self.value_label.setStyleSheet(f"font-size: {TYPOGRAPHY.SIZE_KPI}px; font-weight: {TYPOGRAPHY.WEIGHT_BLACK};")
 
 
 class StatusBadge(QLabel):
