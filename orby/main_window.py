@@ -153,6 +153,7 @@ class OrderDialog(QDialog):
     def __init__(self, parent, customers: list[dict], order: dict | None = None):
         super().__init__(parent)
         self.parent_window = parent
+        self.order = order
         self.setWindowTitle(f"Editar OS #{order['id']:04d}" if order else "Nova Ordem de Serviço")
         self.resize(640, 600)
         layout = QVBoxLayout(self)
@@ -164,6 +165,14 @@ class OrderDialog(QDialog):
 
         self.customer = QComboBox()
         self.equipment = QComboBox()
+        self.equipment.currentIndexChanged.connect(self.on_equipment_changed)
+
+        self.btn_history = QPushButton("📋 Histórico do Aparelho")
+        self.btn_history.setIcon(get_icon("clock", size=ICON_SIZES.SM))
+        self.btn_history.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        self.btn_history.setVisible(False)
+        self.btn_history.clicked.connect(self.view_equipment_history)
+
         for item in customers:
             self.customer.addItem(item["nome"], item["id"])
         self.customer.currentIndexChanged.connect(self.load_equipment)
@@ -251,6 +260,7 @@ class OrderDialog(QDialog):
 
         form.addRow("Cliente *", self.customer)
         form.addRow("Equipamento *", self.equipment)
+        form.addRow("", self.btn_history)
         form.addRow("Problema Relatado *", self.description)
         form.addRow("Diagnóstico Técnico", self.diagnosis)
         form.addRow("Técnico", self.technician)
@@ -281,6 +291,7 @@ class OrderDialog(QDialog):
             self.value.setValue(calc)
 
     def load_equipment(self) -> None:
+        self.equipment.blockSignals(True)
         self.equipment.clear()
         cust_id = self.customer.currentData()
         if cust_id:
@@ -290,6 +301,36 @@ class OrderDialog(QDialog):
                 if item.get("numero_serie"):
                     label += f" (S/N: {item['numero_serie']})"
                 self.equipment.addItem(label, item["id"])
+        self.equipment.blockSignals(False)
+        self.on_equipment_changed()
+
+    def on_equipment_changed(self) -> None:
+        eq_id = self.equipment.currentData()
+        if eq_id and hasattr(self.parent_window, "repository"):
+            history = self.parent_window.repository.orders_by_equipment(eq_id)
+            current_id = self.order["id"] if self.order else None
+            prev_orders = [o for o in history if o["id"] != current_id]
+            if prev_orders:
+                count = len(prev_orders)
+                plural = "manutenções anteriores" if count > 1 else "manutenção anterior"
+                self.btn_history.setText(f"📋 Ver Histórico: {count} {plural} deste aparelho")
+                self.btn_history.setVisible(True)
+            else:
+                self.btn_history.setVisible(False)
+        else:
+            self.btn_history.setVisible(False)
+
+    def view_equipment_history(self) -> None:
+        eq_id = self.equipment.currentData()
+        if not eq_id:
+            return
+        eq = self.parent_window.repository.single_equipment(eq_id)
+        if not eq:
+            return
+        history = self.parent_window.repository.orders_by_equipment(eq_id)
+        from .ui.equipment_history_dialog import EquipmentHistoryDialog
+        dlg = EquipmentHistoryDialog(eq, history, self)
+        dlg.exec()
 
     def values(self) -> tuple[int, int, str, str, float, float, float, str, str, str, str]:
         return (
@@ -880,11 +921,13 @@ class MainWindow(QMainWindow):
 
         self.card_abertas = MetricCard("OS em Aberto", "0", "clock")
         self.card_reparo = MetricCard("Em Reparo", "0", "wrench")
+        self.card_atrasadas = MetricCard("OS Paradas / Alerta", "0", "alert-circle")
         self.card_finalizadas = MetricCard("Finalizadas", "0", "circle-check")
         self.card_faturamento = MetricCard("Faturamento (OS)", "R$ 0,00", "dollar-sign")
 
         cards_layout.addWidget(self.card_abertas)
         cards_layout.addWidget(self.card_reparo)
+        cards_layout.addWidget(self.card_atrasadas)
         cards_layout.addWidget(self.card_finalizadas)
         cards_layout.addWidget(self.card_faturamento)
         layout.addLayout(cards_layout)
@@ -1146,6 +1189,13 @@ class MainWindow(QMainWindow):
         self.edit_equipment_btn.clicked.connect(self.edit_equipment)
         actions.addWidget(self.edit_equipment_btn)
 
+        self.history_equipment_btn = QPushButton("Histórico de Manutenções")
+        self.history_equipment_btn.setIcon(get_icon("clock", size=ICON_SIZES.SM))
+        self.history_equipment_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        self.history_equipment_btn.setToolTip("Ver todas as ordens de serviço anteriores deste aparelho")
+        self.history_equipment_btn.clicked.connect(self.show_equipment_orders_history)
+        actions.addWidget(self.history_equipment_btn)
+
         self.delete_equipment_btn = QPushButton("Excluir Equipamento")
         self.delete_equipment_btn.setIcon(get_icon("trash", size=ICON_SIZES.SM))
         self.delete_equipment_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
@@ -1191,6 +1241,7 @@ class MainWindow(QMainWindow):
 
         self.status_filter = QComboBox()
         self.status_filter.addItem("Todos os Status", "")
+        self.status_filter.addItem("⚠️ Paradas / Atrasadas (>5 dias)", "delayed")
         for status in StatusOS.all_values():
             self.status_filter.addItem(status, status)
         self.status_filter.currentIndexChanged.connect(self.refresh_orders)
@@ -1232,8 +1283,15 @@ class MainWindow(QMainWindow):
         btn_print_exit.setToolTip("Emitir recibo de saída, laudo técnico e termo de garantia")
         btn_print_exit.clicked.connect(self.print_exit_receipt)
 
+        btn_order_history = QPushButton("Histórico do Aparelho")
+        btn_order_history.setIcon(get_icon("laptop", size=ICON_SIZES.SM))
+        btn_order_history.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_order_history.setToolTip("Ver manutenções anteriores do mesmo equipamento")
+        btn_order_history.clicked.connect(self.show_selected_order_equipment_history)
+
         actions.addWidget(edit_btn)
         actions.addWidget(timeline_btn)
+        actions.addWidget(btn_order_history)
         actions.addWidget(btn_print_entry)
         actions.addWidget(btn_print_exit)
         actions.addWidget(self.delete_order_btn)
@@ -1255,6 +1313,14 @@ class MainWindow(QMainWindow):
         self.card_abertas.set_value(str(data.get("abertas") or 0))
         self.card_reparo.set_value(str(data.get("em_reparo") or 0))
         self.card_finalizadas.set_value(str(data.get("finalizadas") or 0))
+
+        atrasadas = data.get("atrasadas") or 0
+        self.card_atrasadas.set_value(str(atrasadas))
+        if atrasadas > 0:
+            self.card_atrasadas.value_label.setStyleSheet(f"font-size: 20px; font-weight: {TYPOGRAPHY.WEIGHT_BLACK}; color: #e11d48;")
+        else:
+            self.card_atrasadas.value_label.setStyleSheet(f"font-size: 20px; font-weight: {TYPOGRAPHY.WEIGHT_BLACK}; color: {get_current_palette().TEXT_PRIMARY};")
+
         if self.perfil != "Gestor":
             self.card_faturamento.set_value("Restrito")
         else:
@@ -1266,10 +1332,21 @@ class MainWindow(QMainWindow):
         for item in orders:
             row = self.dash_table.rowCount()
             self.dash_table.insertRow(row)
-            self.dash_table.setItem(row, 0, QTableWidgetItem(f"OS-{item['id']:04d}"))
+
+            os_txt = f"OS-{item['id']:04d}"
+            if item.get("em_atraso"):
+                os_txt += " ⚠️"
+            os_item = QTableWidgetItem(os_txt)
+            if item.get("em_atraso"):
+                os_item.setToolTip(f"⚠️ ATENÇÃO: Parada há {item.get('dias_parada', 0)} dias sem atualização de status!")
+            self.dash_table.setItem(row, 0, os_item)
             self.dash_table.setItem(row, 1, QTableWidgetItem(item["cliente_nome"]))
             self.dash_table.setItem(row, 2, QTableWidgetItem(item["equipamento_nome"]))
-            badge = StatusBadge(item["status"])
+            badge = StatusBadge(
+                item["status"],
+                is_delayed=item.get("em_atraso", False),
+                days_delayed=item.get("dias_parada", 0),
+            )
             self.dash_table.setCellWidget(row, 3, badge)
             valor_texto = "Restrito" if self.perfil == "Técnico" else formatar_moeda(item["valor"])
             self.dash_table.setItem(row, 4, QTableWidgetItem(valor_texto))
@@ -1327,12 +1404,25 @@ class MainWindow(QMainWindow):
         for item in rows:
             row = self.order_table.rowCount()
             self.order_table.insertRow(row)
-            self.order_table.setItem(row, 0, QTableWidgetItem(f"OS-{item['id']:04d}"))
+
+            os_txt = f"OS-{item['id']:04d}"
+            if item.get("em_atraso"):
+                os_txt += " ⚠️"
+            os_item = QTableWidgetItem(os_txt)
+            if item.get("em_atraso"):
+                os_item.setToolTip(f"⚠️ ATENÇÃO: Esta OS está aberta há {item.get('dias_parada', 0)} dias sem movimentação de status!")
+            self.order_table.setItem(row, 0, os_item)
             self.order_table.setItem(row, 1, QTableWidgetItem(item["cliente_nome"]))
             self.order_table.setItem(row, 2, QTableWidgetItem(item["equipamento_nome"]))
             self.order_table.setItem(row, 3, QTableWidgetItem(item["descricao"]))
-            badge = StatusBadge(item["status"])
+
+            badge = StatusBadge(
+                item["status"],
+                is_delayed=item.get("em_atraso", False),
+                days_delayed=item.get("dias_parada", 0),
+            )
             self.order_table.setCellWidget(row, 4, badge)
+
             if self.perfil == "Técnico":
                 self.order_table.setItem(row, 5, QTableWidgetItem("Restrito"))
                 self.order_table.setItem(row, 6, QTableWidgetItem("Restrito"))
@@ -1355,6 +1445,43 @@ class MainWindow(QMainWindow):
             self.equipment_table.setItem(row, 2, QTableWidgetItem(item["tipo"]))
             self.equipment_table.setItem(row, 3, QTableWidgetItem(marca_modelo or "—"))
             self.equipment_table.setItem(row, 4, QTableWidgetItem(item.get("numero_serie") or "—"))
+
+    def show_selected_order_equipment_history(self) -> None:
+        order_id = self.selected_id(self.order_table)
+        if not order_id:
+            QMessageBox.warning(self, "Atenção", "Selecione uma Ordem de Serviço na tabela.")
+            return
+        order = self.repository.order(order_id)
+        if not order or not order.get("equipamento_id"):
+            QMessageBox.information(self, "Sem Equipamento", "Esta OS não possui equipamento vinculado.")
+            return
+
+        eq_id = order["equipamento_id"]
+        eq = self.repository.single_equipment(eq_id)
+        if not eq:
+            QMessageBox.warning(self, "Não Encontrado", "Equipamento não localizado no sistema.")
+            return
+
+        history = self.repository.orders_by_equipment(eq_id)
+        from .ui.equipment_history_dialog import EquipmentHistoryDialog
+        dlg = EquipmentHistoryDialog(eq, history, self)
+        dlg.exec()
+
+    def show_equipment_orders_history(self) -> None:
+        eq_id = self.selected_id(self.equipment_table)
+        if not eq_id:
+            QMessageBox.warning(self, "Atenção", "Selecione um equipamento na tabela.")
+            return
+
+        eq = self.repository.single_equipment(eq_id)
+        if not eq:
+            QMessageBox.warning(self, "Não Encontrado", "Equipamento não localizado no sistema.")
+            return
+
+        history = self.repository.orders_by_equipment(eq_id)
+        from .ui.equipment_history_dialog import EquipmentHistoryDialog
+        dlg = EquipmentHistoryDialog(eq, history, self)
+        dlg.exec()
 
     def edit_equipment(self) -> None:
         item_id = self.selected_id(self.equipment_table)

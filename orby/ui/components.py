@@ -188,19 +188,34 @@ class StatusBadge(QLabel):
         ),
     }
 
-    def __init__(self, status: str, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        status: str,
+        parent: QWidget | None = None,
+        is_delayed: bool = False,
+        days_delayed: int = 0,
+    ) -> None:
         super().__init__(status, parent)
         self.setAlignment(Qt.AlignCenter)
         self.setContentsMargins(SPACING.SM + 2, SPACING.XS, SPACING.SM + 2, SPACING.XS)
         self.setFixedHeight(DIMENSIONS.STATUS_BADGE_HEIGHT)
-        self.update_status(status)
+        self.update_status(status, is_delayed=is_delayed, days_delayed=days_delayed)
 
-    def update_status(self, status: str) -> None:
-        self.setText(status)
-        style = self.STATUS_STYLES.get(
-            status,
-            "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;",
-        )
+    def update_status(self, status: str, is_delayed: bool = False, days_delayed: int = 0) -> None:
+        if is_delayed:
+            display_text = f"⚠️ {status} ({days_delayed}d)"
+            style = (
+                "background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #fff1f2, stop:1 #ffe4e6); "
+                "color: #b91c1c; border: 1.5px solid #f87171;"
+            )
+            self.setToolTip(f"⚠️ ATENÇÃO: Esta ordem está aberta há {days_delayed} dias sem atualização de status!")
+        else:
+            display_text = status
+            style = self.STATUS_STYLES.get(
+                status,
+                "background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;",
+            )
+        self.setText(display_text)
         self.setStyleSheet(
             f"border-radius: {DIMENSIONS.STATUS_BADGE_RADIUS}px; font-size: {TYPOGRAPHY.SIZE_CAPTION + 0.5}px; "
             f"font-weight: {TYPOGRAPHY.WEIGHT_EXTRABOLD}; padding: 2px {SPACING.SM + 2}px; {style}"

@@ -252,32 +252,74 @@ class Repository:
 
     # --- ORDENS DE SERVIÇO ---
 
-    def orders(self, term: str = "", status: str = "") -> list[dict]:
+    def orders(
+        self,
+        term: str = "",
+        status: str = "",
+        only_delayed: bool = False,
+        max_days: int = 5,
+    ) -> list[dict]:
         sql = """SELECT o.*, c.nome AS cliente_nome,
-                        COALESCE(e.tipo || ' ' || COALESCE(e.marca, '') || ' ' || COALESCE(e.modelo, ''), 'Não informado') AS equipamento_nome
+                        COALESCE(e.tipo || ' ' || COALESCE(e.marca, '') || ' ' || COALESCE(e.modelo, ''), 'Não informado') AS equipamento_nome,
+                        e.numero_serie, e.marca, e.modelo, e.tipo,
+                        CAST(julianday('now', 'localtime') - julianday(COALESCE((SELECT MAX(criado_em) FROM historico_os WHERE ordem_id = o.id), o.data_abertura)) AS INTEGER) AS dias_parada
                  FROM ordens_servico o
                  JOIN clientes c ON c.id=o.cliente_id
                  LEFT JOIN equipamentos e ON e.id=o.equipamento_id
                  WHERE (c.nome LIKE ? OR o.descricao LIKE ? OR CAST(o.id AS TEXT) LIKE ? OR (e.modelo IS NOT NULL AND e.modelo LIKE ?))"""
         params: list[str] = [f"%{term}%", f"%{term}%", f"%{term}%", f"%{term}%"]
-        if status:
+        if status and status != "delayed":
             sql += " AND o.status=?"
             params.append(status)
         sql += " ORDER BY o.id DESC"
         with self.database.connect() as db:
             rows = db.execute(sql, params).fetchall()
-        return [dict(row) for row in rows]
+
+        result = []
+        for row in rows:
+            d = dict(row)
+            dias = max(0, d.get("dias_parada") or 0)
+            d["dias_parada"] = dias
+            d["em_atraso"] = (d["status"] not in ("Finalizada", "Cancelada")) and (dias >= max_days)
+            if only_delayed or status == "delayed":
+                if d["em_atraso"]:
+                    result.append(d)
+            else:
+                result.append(d)
+        return result
 
     def order(self, order_id: int) -> dict | None:
         sql = """SELECT o.*, c.nome AS cliente_nome,
-                        COALESCE(e.tipo || ' ' || COALESCE(e.marca, '') || ' ' || COALESCE(e.modelo, ''), 'Não informado') AS equipamento_nome
+                        COALESCE(e.tipo || ' ' || COALESCE(e.marca, '') || ' ' || COALESCE(e.modelo, ''), 'Não informado') AS equipamento_nome,
+                        e.numero_serie, e.marca, e.modelo, e.tipo,
+                        CAST(julianday('now', 'localtime') - julianday(COALESCE((SELECT MAX(criado_em) FROM historico_os WHERE ordem_id = o.id), o.data_abertura)) AS INTEGER) AS dias_parada
                  FROM ordens_servico o
                  JOIN clientes c ON c.id=o.cliente_id
                  LEFT JOIN equipamentos e ON e.id=o.equipamento_id
                  WHERE o.id = ?"""
         with self.database.connect() as db:
             row = db.execute(sql, (order_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        dias = max(0, d.get("dias_parada") or 0)
+        d["dias_parada"] = dias
+        d["em_atraso"] = (d["status"] not in ("Finalizada", "Cancelada")) and (dias >= 5)
+        return d
+
+    def orders_by_equipment(self, equipment_id: int) -> list[dict]:
+        """Retorna o histórico completo de manutenções de um determinado equipamento."""
+        sql = """SELECT o.*, c.nome AS cliente_nome,
+                        COALESCE(e.tipo || ' ' || COALESCE(e.marca, '') || ' ' || COALESCE(e.modelo, ''), 'Não informado') AS equipamento_nome,
+                        e.numero_serie, e.tipo, e.marca, e.modelo
+                 FROM ordens_servico o
+                 JOIN clientes c ON c.id=o.cliente_id
+                 JOIN equipamentos e ON e.id=o.equipamento_id
+                 WHERE o.equipamento_id = ?
+                 ORDER BY o.id DESC"""
+        with self.database.connect() as db:
+            rows = db.execute(sql, (equipment_id,)).fetchall()
+        return [dict(r) for r in rows]
 
     def order_history(self, order_id: int) -> list[dict]:
         with self.database.connect() as db:
@@ -448,6 +490,7 @@ class Repository:
                     SUM(CASE WHEN status='Aguardando Aprovação' THEN 1 ELSE 0 END) as aguardando_aprovacao,
                     SUM(CASE WHEN status='Aguardando Retirada' THEN 1 ELSE 0 END) as aguardando_retirada,
                     SUM(CASE WHEN status='Finalizada' THEN 1 ELSE 0 END) as finalizadas,
+                    SUM(CASE WHEN status NOT IN ('Finalizada', 'Cancelada') AND (julianday('now', 'localtime') - julianday(COALESCE((SELECT MAX(criado_em) FROM historico_os WHERE ordem_id = ordens_servico.id), data_abertura))) >= 5 THEN 1 ELSE 0 END) as atrasadas,
                     COALESCE(SUM(CASE WHEN status='Finalizada' THEN valor ELSE 0 END), 0) as faturamento
                    FROM ordens_servico"""
             ).fetchone()

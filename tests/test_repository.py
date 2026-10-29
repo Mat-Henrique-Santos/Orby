@@ -142,5 +142,73 @@ class TestRepository(unittest.TestCase):
         self.assertEqual(eq_updated["numero_serie"], "SN9988-REV2")
 
 
+    def test_equipment_history(self):
+        cust_id = self.repo.add_customer("Carlos Aparelho", "11988887777")
+        eq_id = self.repo.add_equipment(cust_id, "Celular", "Apple", "iPhone 12", "IPHONE-SN-12")
+
+        # Abre primeira OS
+        os1 = self.repo.add_order(
+            cliente_id=cust_id,
+            equipamento_id=eq_id,
+            descricao="Troca de bateria",
+            status="Finalizada",
+            valor=250.0,
+            forma_pagamento="PIX",
+        )
+
+        # Abre segunda OS para o mesmo equipamento
+        os2 = self.repo.add_order(
+            cliente_id=cust_id,
+            equipamento_id=eq_id,
+            descricao="Troca de conector de carga",
+            status="Em Reparo",
+            valor=180.0,
+        )
+
+        history = self.repo.orders_by_equipment(eq_id)
+        self.assertEqual(len(history), 2)
+        # Mais recente primeiro
+        self.assertEqual(history[0]["id"], os2)
+        self.assertEqual(history[1]["id"], os1)
+
+    def test_delayed_orders_and_alerts(self):
+        cust_id = self.repo.add_customer("Juliana Teste", "11977778888")
+        eq_id = self.repo.add_equipment(cust_id, "Notebook", "Dell", "Vostro")
+
+        # OS recente (criada agora) -> não deve estar em atraso
+        os_recente = self.repo.add_order(
+            cliente_id=cust_id,
+            equipamento_id=eq_id,
+            descricao="Formatação",
+            status="Aberta",
+            valor=120.0,
+        )
+        ordem_rec = self.repo.order(os_recente)
+        self.assertFalse(ordem_rec["em_atraso"])
+
+        # OS antiga (criada há 10 dias) diretamente no banco para simular atraso
+        with self.db.connect() as conn:
+            cursor = conn.execute(
+                """INSERT INTO ordens_servico(cliente_id, equipamento_id, descricao, status, valor, data_abertura)
+                   VALUES (?, ?, 'Placa mãe em curto', 'Em Diagnóstico', 400.0, datetime('now', '-10 days'))""",
+                (cust_id, eq_id),
+            )
+            os_antiga_id = cursor.lastrowid
+
+        ordem_antiga = self.repo.order(os_antiga_id)
+        self.assertTrue(ordem_antiga["em_atraso"])
+        self.assertGreaterEqual(ordem_antiga["dias_parada"], 9)
+
+        # Filtro de ordens paradas
+        delayed_only = self.repo.orders(status="delayed")
+        delayed_ids = [o["id"] for o in delayed_only]
+        self.assertIn(os_antiga_id, delayed_ids)
+        self.assertNotIn(os_recente, delayed_ids)
+
+        # Métrica do Dashboard
+        dash = self.repo.dashboard()
+        self.assertGreaterEqual(dash.get("atrasadas", 0), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
