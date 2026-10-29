@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import hashlib
+import hmac
 import os
 import sqlite3
 from pathlib import Path
@@ -21,13 +22,64 @@ def get_default_db_path() -> str:
     return str(data_dir / "orby.db")
 
 
-def hash_password(password: str) -> str:
+def hash_password_legacy(password: str) -> str:
+    """Hash legado SHA-256 com sal fixo (mantido exclusivamente para retrocompatibilidade)."""
     salt = "orby_aero_salt_2026"
     return hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
 
 
+def hash_password(password: str, salt: bytes | None = None) -> str:
+    """
+    Gera hash seguro utilizando a função de derivação de chave 'hashlib.scrypt' (nativo do Python 3.8+).
+    Utiliza salt criptográfico pseudoaleatório único de 16 bytes e parâmetros recomendados (N=16384, r=8, p=1).
+    Formato armazenado: 'scrypt$<salt_hex>$<derived_key_hex>'
+    """
+    if salt is None:
+        salt = os.urandom(16)
+    derived = hashlib.scrypt(
+        password.encode("utf-8"),
+        salt=salt,
+        n=16384,
+        r=8,
+        p=1,
+    )
+    return f"scrypt${salt.hex()}${derived.hex()}"
+
+
+def is_legacy_hash(hashed: str) -> bool:
+    """Verifica se o hash armazenado pertence ao padrão legado SHA-256."""
+    return not (isinstance(hashed, str) and hashed.startswith("scrypt$"))
+
+
 def verify_password(password: str, hashed: str) -> bool:
-    return hash_password(password) == hashed
+    """
+    Verifica a senha de forma segura (tempo constante).
+    Suporta tanto os hashes modernos scrypt quanto os legados SHA-256 para permitir migração transparente.
+    """
+    if not hashed or not isinstance(hashed, str):
+        return False
+
+    if hashed.startswith("scrypt$"):
+        parts = hashed.split("$")
+        if len(parts) == 3:
+            _, salt_hex, hash_hex = parts
+            try:
+                salt = bytes.fromhex(salt_hex)
+                derived = hashlib.scrypt(
+                    password.encode("utf-8"),
+                    salt=salt,
+                    n=16384,
+                    r=8,
+                    p=1,
+                )
+                return hmac.compare_digest(derived.hex(), hash_hex)
+            except Exception:
+                return False
+        return False
+
+    # Fallback seguro com tempo constante para hashes legados
+    legacy_hash = hash_password_legacy(password)
+    return hmac.compare_digest(legacy_hash, hashed)
 
 
 class DatabaseBackend(ABC):

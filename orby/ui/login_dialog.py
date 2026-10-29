@@ -20,15 +20,21 @@ from .tokens import DIMENSIONS, ICON_SIZES, RADIUS, SPACING, TYPOGRAPHY
 
 
 class LoginDialog(QDialog):
-    """Tela de Autenticação Frutiger Aero com suporte a perfis de acesso (RBAC)."""
+    """Tela de Autenticação Frutiger Aero com suporte a perfis de acesso (RBAC) e Modo Produção."""
 
-    def __init__(self, repository: Repository, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        repository: Repository,
+        parent: QWidget | None = None,
+        production_mode: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.repository = repository
         self.user: dict | None = None
+        self.production_mode = production_mode
 
         self.setWindowTitle("Orby — Acesso ao Sistema")
-        self.setFixedSize(460, 560)
+        self.setFixedSize(460, 470 if production_mode else 560)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         pal = get_current_palette()
@@ -114,9 +120,12 @@ class LoginDialog(QDialog):
         self.btn_entrar.clicked.connect(self.attempt_login)
         card_layout.addWidget(self.btn_entrar)
 
-        # 4. Atalhos rápidos para troca de perfil de teste
-        shortcuts_box = QVBoxLayout()
+        # 4. Atalhos rápidos para troca de perfil de teste (ocultos em Modo Produção)
+        self.shortcuts_container = QWidget()
+        shortcuts_box = QVBoxLayout(self.shortcuts_container)
+        shortcuts_box.setContentsMargins(0, 0, 0, 0)
         shortcuts_box.setSpacing(SPACING.XS)
+
         shortcuts_title = QLabel("Atalhos de Acesso Rápido:")
         shortcuts_title.setAlignment(Qt.AlignCenter)
         shortcuts_title.setStyleSheet(f"font-size: {TYPOGRAPHY.SIZE_CAPTION}px; color: {pal.TEXT_SECONDARY};")
@@ -142,7 +151,10 @@ class LoginDialog(QDialog):
         btn_row.addWidget(btn_atend)
         shortcuts_box.addLayout(btn_row)
 
-        card_layout.addLayout(shortcuts_box)
+        card_layout.addWidget(self.shortcuts_container)
+        if self.production_mode:
+            self.shortcuts_container.setVisible(False)
+
         main_layout.addWidget(card)
 
         # Foco inicial

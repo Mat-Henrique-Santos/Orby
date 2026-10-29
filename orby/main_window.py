@@ -38,6 +38,7 @@ from .core.models import (
 from .core.backup import BackupManager, InvalidBackupFileError
 from .importer import read_table, validate_customers
 from .repository import PermissionDeniedError, Repository
+from .ui.user_dialog import UserDialog, PasswordDialog
 from .ui.components import (
     ContentCard,
     MetricCard,
@@ -1494,9 +1495,9 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(SPACING.MD + 2)
+        layout.setSpacing(SPACING.MD)
 
-        # Cabeçalho da Seção de Configurações
+        # Cabeçalho da Seção com Sub-abas de Navegação
         header_card = ContentCard()
         h_layout = QHBoxLayout(header_card)
         h_layout.setContentsMargins(SPACING.LG + 2, SPACING.MD, SPACING.LG + 2, SPACING.MD)
@@ -1504,30 +1505,74 @@ class MainWindow(QMainWindow):
 
         title_box = QVBoxLayout()
         title_box.setSpacing(SPACING.XXS)
-        title = QLabel("Configurações & Segurança dos Dados")
+        title = QLabel("Painel Administrativo & Configurações")
         title.setObjectName("SectionTitle")
-        subtitle = QLabel("Gestão de Backups, Restauração de Dados e Preferências do Banco Local")
+        subtitle = QLabel("Gestão de Segurança, Cópias de Backup, Usuários (RBAC) e Dados Comerciais")
         subtitle.setObjectName("SummaryLabel")
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
         h_layout.addLayout(title_box)
         h_layout.addStretch()
 
-        btn_folder = QPushButton("Abrir Pasta de Backups")
-        btn_folder.setIcon(get_icon("database", size=ICON_SIZES.SM))
-        btn_folder.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
-        btn_folder.clicked.connect(self.open_backup_folder)
-        h_layout.addWidget(btn_folder)
+        # Botões de alternância de sub-aba
+        self.settings_tab_buttons = []
+        tabs_info = [
+            ("Backup & Banco", "database", 0),
+            ("Usuários & Acessos", "users", 1),
+            ("Dados da Empresa", "settings", 2),
+        ]
+        for label, icon_name, idx in tabs_info:
+            btn = QPushButton(f"  {label}")
+            btn.setIcon(get_icon(icon_name, size=ICON_SIZES.SM))
+            btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+            btn.setCheckable(True)
+            btn.setChecked(idx == 0)
+            if idx == 0:
+                btn.setObjectName("PrimaryButton")
+            btn.clicked.connect(lambda checked=False, i=idx: self.switch_settings_tab(i))
+            h_layout.addWidget(btn)
+            self.settings_tab_buttons.append(btn)
 
         layout.addWidget(header_card)
 
-        # Informações do Banco de Dados Atual
+        # QStackedWidget contendo as 3 páginas de configurações
+        self.settings_stack = QStackedWidget()
+        self.settings_stack.addWidget(self._make_settings_backup_page())
+        self.settings_stack.addWidget(self._make_settings_users_page())
+        self.settings_stack.addWidget(self._make_settings_company_page())
+
+        layout.addWidget(self.settings_stack, 1)
+        return page
+
+    def switch_settings_tab(self, index: int) -> None:
+        self.settings_stack.setCurrentIndex(index)
+        for i, btn in enumerate(self.settings_tab_buttons):
+            is_active = (i == index)
+            btn.setChecked(is_active)
+            btn.setObjectName("PrimaryButton" if is_active else "SecondaryButton")
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+        if index == 0:
+            self.refresh_settings_backup()
+        elif index == 1:
+            self.refresh_users()
+        elif index == 2:
+            self.load_company_settings()
+
+    def _make_settings_backup_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACING.MD)
+
+        # 1. Status do Banco de Dados
         db_card = ContentCard()
         db_layout = QVBoxLayout(db_card)
         db_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
         db_layout.setSpacing(SPACING.SM + 2)
 
-        db_title = QLabel("Status do Banco de Dados Ativo (SQLite)")
+        db_title = QLabel("Status do Banco de Dados Local (SQLite)")
         db_title.setObjectName("SectionSubtitle")
         db_layout.addWidget(db_title)
 
@@ -1545,7 +1590,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(db_card)
 
-        # Painel Operacional de Backup & Restauração
+        # 2. Ações de Backup
         action_card = ContentCard()
         action_layout = QVBoxLayout(action_card)
         action_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
@@ -1577,10 +1622,16 @@ class MainWindow(QMainWindow):
         btn_restore.clicked.connect(lambda: self.do_restore_backup())
         btns_layout.addWidget(btn_restore)
 
+        btn_folder = QPushButton("Abrir Pasta de Backups")
+        btn_folder.setIcon(get_icon("database", size=ICON_SIZES.SM))
+        btn_folder.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_folder.clicked.connect(self.open_backup_folder)
+        btns_layout.addWidget(btn_folder)
+
         btns_layout.addStretch()
         action_layout.addLayout(btns_layout)
 
-        # Checkbox de Backup Automático na Saída
+        # Checkbox Auto-backup
         self.chk_auto_backup = QCheckBox("Criar cópia de segurança automática (.zip) na pasta padrão sempre que o sistema for fechado")
         auto_enabled = self.repository.database.get_setting("auto_backup_on_exit", "true").lower() == "true"
         self.chk_auto_backup.setChecked(auto_enabled)
@@ -1589,7 +1640,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(action_card)
 
-        # Tabela de Histórico de Backups Salvos
+        # 3. Tabela de Backups
         table_card = ContentCard()
         table_layout = QVBoxLayout(table_card)
         table_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
@@ -1603,7 +1654,7 @@ class MainWindow(QMainWindow):
         btn_refresh_bck = QPushButton("Atualizar Lista")
         btn_refresh_bck.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
         btn_refresh_bck.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
-        btn_refresh_bck.clicked.connect(self.refresh_settings)
+        btn_refresh_bck.clicked.connect(self.refresh_settings_backup)
         th_box.addWidget(btn_refresh_bck)
         table_layout.addLayout(th_box)
 
@@ -1619,7 +1670,203 @@ class MainWindow(QMainWindow):
         layout.addWidget(table_card, 1)
         return page
 
+    def _make_settings_users_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACING.MD)
+
+        # 1. Controles e Ações de Usuários
+        u_card = ContentCard()
+        u_layout = QVBoxLayout(u_card)
+        u_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        u_layout.setSpacing(SPACING.MD)
+
+        top_row = QHBoxLayout()
+        u_title_box = QVBoxLayout()
+        u_title_box.setSpacing(SPACING.XXS)
+        u_title = QLabel("Gestão de Colaboradores e Controle de Acesso (RBAC)")
+        u_title.setObjectName("SectionSubtitle")
+        u_sub = QLabel("Segurança com derivação de chave scrypt e salt criptográfico individual de 128 bits")
+        u_sub.setObjectName("SummaryLabel")
+        u_title_box.addWidget(u_title)
+        u_title_box.addWidget(u_sub)
+        top_row.addLayout(u_title_box)
+        top_row.addStretch()
+        u_layout.addLayout(top_row)
+
+        # Botões de Ação
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(SPACING.SM)
+
+        btn_new_user = QPushButton("Novo Colaborador")
+        btn_new_user.setObjectName("PrimaryButton")
+        btn_new_user.setIcon(get_icon("plus", color="#ffffff", size=ICON_SIZES.SM))
+        btn_new_user.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_new_user.clicked.connect(self.open_new_user_dialog)
+        btn_row.addWidget(btn_new_user)
+
+        btn_edit_user = QPushButton("Editar Dados")
+        btn_edit_user.setIcon(get_icon("pencil", size=ICON_SIZES.SM))
+        btn_edit_user.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_edit_user.clicked.connect(self.open_edit_user_dialog)
+        btn_row.addWidget(btn_edit_user)
+
+        btn_change_pwd = QPushButton("Alterar Senha")
+        btn_change_pwd.setIcon(get_icon("lock", size=ICON_SIZES.SM))
+        btn_change_pwd.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_change_pwd.clicked.connect(self.open_change_password_dialog)
+        btn_row.addWidget(btn_change_pwd)
+
+        btn_toggle_status = QPushButton("Desativar / Reativar")
+        btn_toggle_status.setIcon(get_icon("shield", size=ICON_SIZES.SM))
+        btn_toggle_status.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_toggle_status.clicked.connect(self.toggle_user_status_action)
+        btn_row.addWidget(btn_toggle_status)
+
+        btn_refresh_u = QPushButton("Atualizar Lista")
+        btn_refresh_u.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
+        btn_refresh_u.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_refresh_u.clicked.connect(self.refresh_users)
+        btn_row.addWidget(btn_refresh_u)
+
+        btn_row.addStretch()
+        u_layout.addLayout(btn_row)
+
+        # Modo Produção
+        self.chk_modo_producao = QCheckBox(
+            "Modo Produção Comercial (ocultar botões de atalho rápido na tela de login)"
+        )
+        prod_active = self.repository.database.get_setting("modo_producao", "false").lower() == "true"
+        self.chk_modo_producao.setChecked(prod_active)
+        self.chk_modo_producao.stateChanged.connect(self.on_modo_producao_toggled)
+        u_layout.addWidget(self.chk_modo_producao)
+
+        layout.addWidget(u_card)
+
+        # 2. Tabela de Usuários
+        tbl_card = ContentCard()
+        tbl_layout = QVBoxLayout(tbl_card)
+        tbl_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        tbl_layout.setSpacing(SPACING.MD)
+
+        tbl_title = QLabel("Colaboradores Cadastrados no Sistema")
+        tbl_title.setObjectName("SectionSubtitle")
+        tbl_layout.addWidget(tbl_title)
+
+        self.users_table = ModernTableWidget(0, 6)
+        self.users_table.setHorizontalHeaderLabels([
+            "ID", "Nome Completo", "Login de Acesso", "Perfil de Acesso", "Status", "Cadastrado em"
+        ])
+        self.users_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.users_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.users_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.users_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.users_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.users_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.users_table.doubleClicked.connect(self.open_edit_user_dialog)
+        tbl_layout.addWidget(self.users_table)
+
+        layout.addWidget(tbl_card, 1)
+        return page
+
+    def _make_settings_company_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACING.MD)
+
+        card = ContentCard()
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
+        card_layout.setSpacing(SPACING.MD)
+
+        c_title = QLabel("Dados Comerciais da Empresa / Assistência Técnica")
+        c_title.setObjectName("SectionSubtitle")
+        card_layout.addWidget(c_title)
+
+        c_desc = QLabel(
+            "Estes dados são preenchidos automaticamente no cabeçalho e rodapé dos Comprovantes de Entrada, "
+            "Recibos/Laudos de Saída e Relatórios Financeiros emitidos em PDF."
+        )
+        c_desc.setObjectName("SummaryLabel")
+        card_layout.addWidget(c_desc)
+
+        form_layout = QGridLayout()
+        form_layout.setSpacing(SPACING.MD)
+
+        # Razão Social / Nome Fantasia
+        lbl_nome = QLabel("Razão Social / Nome Fantasia *")
+        lbl_nome.setStyleSheet(f"font-weight: {TYPOGRAPHY.WEIGHT_BOLD};")
+        self.input_emp_nome = QLineEdit()
+        self.input_emp_nome.setObjectName("PillSearch")
+        self.input_emp_nome.setPlaceholderText("Ex: Orby Assistência Técnica e Serviços")
+        form_layout.addWidget(lbl_nome, 0, 0)
+        form_layout.addWidget(self.input_emp_nome, 1, 0)
+
+        # CNPJ / CPF
+        lbl_cnpj = QLabel("CNPJ ou CPF *")
+        lbl_cnpj.setStyleSheet(f"font-weight: {TYPOGRAPHY.WEIGHT_BOLD};")
+        self.input_emp_cnpj = QLineEdit()
+        self.input_emp_cnpj.setObjectName("PillSearch")
+        self.input_emp_cnpj.setPlaceholderText("Ex: 12.345.678/0001-90")
+        form_layout.addWidget(lbl_cnpj, 0, 1)
+        form_layout.addWidget(self.input_emp_cnpj, 1, 1)
+
+        # Telefone / WhatsApp
+        lbl_tel = QLabel("Telefone / WhatsApp de Contato *")
+        lbl_tel.setStyleSheet(f"font-weight: {TYPOGRAPHY.WEIGHT_BOLD};")
+        self.input_emp_tel = QLineEdit()
+        self.input_emp_tel.setObjectName("PillSearch")
+        self.input_emp_tel.setPlaceholderText("Ex: (11) 98765-4321")
+        form_layout.addWidget(lbl_tel, 2, 0)
+        form_layout.addWidget(self.input_emp_tel, 3, 0)
+
+        # Endereço Completo
+        lbl_end = QLabel("Endereço Completo da Oficina *")
+        lbl_end.setStyleSheet(f"font-weight: {TYPOGRAPHY.WEIGHT_BOLD};")
+        self.input_emp_end = QLineEdit()
+        self.input_emp_end.setObjectName("PillSearch")
+        self.input_emp_end.setPlaceholderText("Ex: Rua das Flores, 120, Sala 3 — Centro")
+        form_layout.addWidget(lbl_end, 2, 1)
+        form_layout.addWidget(self.input_emp_end, 3, 1)
+
+        card_layout.addLayout(form_layout)
+
+        # Termos de Garantia / Condições Padrão
+        lbl_termos = QLabel("Termos de Garantia e Condições Gerais (Impressos nos Comprovantes)")
+        lbl_termos.setStyleSheet(f"font-weight: {TYPOGRAPHY.WEIGHT_BOLD};")
+        card_layout.addWidget(lbl_termos)
+
+        self.input_emp_termos = QTextEdit()
+        self.input_emp_termos.setPlaceholderText("Digite os termos de garantia, prazos e condições aplicáveis às ordens de serviço...")
+        self.input_emp_termos.setMinimumHeight(100)
+        card_layout.addWidget(self.input_emp_termos)
+
+        btn_save_emp = QPushButton("Salvar Informações da Empresa")
+        btn_save_emp.setObjectName("PrimaryButton")
+        btn_save_emp.setIcon(get_icon("circle-check", color="#ffffff", size=ICON_SIZES.SM))
+        btn_save_emp.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        btn_save_emp.clicked.connect(self.save_company_settings)
+        card_layout.addWidget(btn_save_emp, 0, Qt.AlignLeft)
+
+        layout.addWidget(card)
+        layout.addStretch()
+        return page
+
     def refresh_settings(self) -> None:
+        if hasattr(self, "settings_stack"):
+            current_idx = self.settings_stack.currentIndex()
+            if current_idx == 0:
+                self.refresh_settings_backup()
+            elif current_idx == 1:
+                self.refresh_users()
+            elif current_idx == 2:
+                self.load_company_settings()
+        else:
+            self.refresh_settings_backup()
+
+    def refresh_settings_backup(self) -> None:
         manager = BackupManager(db_path=self.repository.database.path)
         info = manager.get_database_info()
 
@@ -1651,6 +1898,155 @@ class MainWindow(QMainWindow):
                 btn_rst.clicked.connect(lambda checked=False, p=b["path"]: self.do_restore_backup(p))
                 self.backup_table.setCellWidget(row, 4, btn_rst)
 
+    def refresh_users(self) -> None:
+        if not hasattr(self, "users_table"):
+            return
+        users = self.repository.users()
+        self.users_table.setRowCount(0)
+        for u in users:
+            row = self.users_table.rowCount()
+            self.users_table.insertRow(row)
+
+            # ID
+            item_id = QTableWidgetItem(str(u["id"]))
+            item_id.setTextAlignment(Qt.AlignCenter)
+            self.users_table.setItem(row, 0, item_id)
+
+            # Nome
+            item_nome = QTableWidgetItem(u["nome"])
+            self.users_table.setItem(row, 1, item_nome)
+
+            # Login
+            item_login = QTableWidgetItem(u["login"])
+            self.users_table.setItem(row, 2, item_login)
+
+            # Perfil
+            item_perfil = QTableWidgetItem(u["perfil"])
+            item_perfil.setTextAlignment(Qt.AlignCenter)
+            self.users_table.setItem(row, 3, item_perfil)
+
+            # Status (Ativo / Inativo)
+            is_active = bool(u.get("ativo", 1))
+            status_text = "Ativo" if is_active else "Desativado"
+            item_status = QTableWidgetItem(status_text)
+            item_status.setTextAlignment(Qt.AlignCenter)
+            self.users_table.setItem(row, 4, item_status)
+
+            # Cadastrado em
+            dt_criado = u.get("criado_em", "—")
+            item_dt = QTableWidgetItem(str(dt_criado)[:19])
+            item_dt.setTextAlignment(Qt.AlignCenter)
+            self.users_table.setItem(row, 5, item_dt)
+
+    def _get_selected_user(self) -> dict | None:
+        if not hasattr(self, "users_table"):
+            return None
+        selected = self.users_table.selectedItems()
+        if not selected:
+            return None
+        row = selected[0].row()
+        user_id = int(self.users_table.item(row, 0).text())
+        users = self.repository.users()
+        for u in users:
+            if u["id"] == user_id:
+                return u
+        return None
+
+    def open_new_user_dialog(self) -> None:
+        dialog = UserDialog(self)
+        if dialog.exec():
+            data = dialog.get_data()
+            try:
+                self.repository.add_user(
+                    nome=data["nome"],
+                    login=data["login"],
+                    password=data["password"],
+                    perfil=data["perfil"],
+                )
+                QMessageBox.information(
+                    self,
+                    "Colaborador Cadastrado",
+                    f"O colaborador '{data['nome']}' foi cadastrado com sucesso!",
+                )
+                self.refresh_users()
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao Cadastrar", str(e))
+
+    def open_edit_user_dialog(self) -> None:
+        user = self._get_selected_user()
+        if not user:
+            QMessageBox.warning(self, "Atenção", "Selecione um colaborador na tabela para editar.")
+            return
+
+        dialog = UserDialog(self, user_data=user)
+        if dialog.exec():
+            data = dialog.get_data()
+            try:
+                self.repository.update_user(
+                    user_id=user["id"],
+                    nome=data["nome"],
+                    perfil=data["perfil"],
+                    login=data["login"],
+                )
+                QMessageBox.information(
+                    self,
+                    "Dados Atualizados",
+                    f"Os dados de '{data['nome']}' foram atualizados com sucesso!",
+                )
+                self.refresh_users()
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao Atualizar", str(e))
+
+    def open_change_password_dialog(self) -> None:
+        user = self._get_selected_user()
+        if not user:
+            QMessageBox.warning(self, "Atenção", "Selecione um colaborador na tabela para alterar a senha.")
+            return
+
+        dialog = PasswordDialog(user_name=user["nome"], parent=self)
+        if dialog.exec():
+            new_pwd = dialog.get_password()
+            try:
+                self.repository.change_password(user["id"], new_pwd)
+                QMessageBox.information(
+                    self,
+                    "Senha Atualizada",
+                    f"A senha de acesso de '{user['nome']}' foi redefinida com sucesso!",
+                )
+            except Exception as e:
+                QMessageBox.critical(self, "Erro ao Alterar Senha", str(e))
+
+    def toggle_user_status_action(self) -> None:
+        user = self._get_selected_user()
+        if not user:
+            QMessageBox.warning(self, "Atenção", "Selecione um colaborador na tabela para alterar o status.")
+            return
+
+        is_active = bool(user.get("ativo", 1))
+        novo_status = not is_active
+        acao = "reativar" if novo_status else "desativar"
+
+        reply = QMessageBox.question(
+            self,
+            "Confirmar Alteração de Acesso",
+            f"Deseja realmente {acao} o acesso de '{user['nome']}' ({user['login']}) ao sistema?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            self.repository.toggle_user_status(user["id"], novo_status)
+            QMessageBox.information(
+                self,
+                "Status Alterado",
+                f"O colaborador '{user['nome']}' foi {acao}do com sucesso!",
+            )
+            self.refresh_users()
+        except Exception as e:
+            QMessageBox.critical(self, "Ação Não Permitida", str(e))
+
     def do_manual_backup(self) -> None:
         manager = BackupManager(db_path=self.repository.database.path)
         from datetime import datetime
@@ -1675,7 +2071,7 @@ class MainWindow(QMainWindow):
                 "Backup Realizado com Sucesso",
                 f"A cópia de segurança foi gerada com sucesso!\n\nArquivo: {os.path.basename(saved_path)}\nLocal: {saved_path}",
             )
-            self.refresh_settings()
+            self.refresh_settings_backup()
         except Exception as e:
             QMessageBox.critical(self, "Erro no Backup", f"Não foi possível gerar a cópia de segurança:\n{e}")
 
@@ -1688,7 +2084,7 @@ class MainWindow(QMainWindow):
                 "Backup Rápido Concluído",
                 f"Cópia de segurança compactada criada com sucesso na pasta padrão!\n\nArquivo: {os.path.basename(saved_path)}",
             )
-            self.refresh_settings()
+            self.refresh_settings_backup()
         except Exception as e:
             QMessageBox.critical(self, "Erro no Backup", f"Falha no backup rápido:\n{e}")
 
@@ -1749,6 +2145,37 @@ class MainWindow(QMainWindow):
         enabled = (state == Qt.CheckState.Checked.value or state == 2)
         self.repository.database.set_setting("auto_backup_on_exit", "true" if enabled else "false")
 
+    def on_modo_producao_toggled(self, state: int) -> None:
+        enabled = (state == Qt.CheckState.Checked.value or state == 2)
+        self.repository.database.set_setting("modo_producao", "true" if enabled else "false")
+
+    def save_company_settings(self) -> None:
+        db = self.repository.database
+        db.set_setting("empresa_nome", self.input_emp_nome.text().strip())
+        db.set_setting("empresa_cnpj", self.input_emp_cnpj.text().strip())
+        db.set_setting("empresa_telefone", self.input_emp_tel.text().strip())
+        db.set_setting("empresa_endereco", self.input_emp_end.text().strip())
+        db.set_setting("empresa_termos", self.input_emp_termos.toPlainText().strip())
+        QMessageBox.information(
+            self,
+            "Dados da Empresa Salvos",
+            "As informações cadastrais foram salvas com sucesso!\nElas já serão utilizadas nos próximos comprovantes e relatórios em PDF.",
+        )
+
+    def load_company_settings(self) -> None:
+        db = self.repository.database
+        if hasattr(self, "input_emp_nome"):
+            self.input_emp_nome.setText(db.get_setting("empresa_nome", "Orby Assistência Técnica & Gestão"))
+            self.input_emp_cnpj.setText(db.get_setting("empresa_cnpj", "00.000.000/0001-00"))
+            self.input_emp_tel.setText(db.get_setting("empresa_telefone", "(11) 98765-4321"))
+            self.input_emp_end.setText(db.get_setting("empresa_endereco", "Av. Principal, 100 — Centro"))
+            default_termos = (
+                "1. Garantia legal de 90 dias referente aos serviços e peças aplicadas, conforme art. 26 do CDC.\n"
+                "2. A garantia não cobre danos por mau uso, umidade, quedas ou intervenção de terceiros.\n"
+                "3. Equipamentos não retirados em até 90 dias após aviso de conclusão poderão sofrer taxa de guarda."
+            )
+            self.input_emp_termos.setPlainText(db.get_setting("empresa_termos", default_termos))
+
     def get_company_info(self) -> dict:
         db = self.repository.database
         return {
@@ -1756,6 +2183,7 @@ class MainWindow(QMainWindow):
             "empresa_cnpj": db.get_setting("empresa_cnpj", "00.000.000/0001-00"),
             "empresa_telefone": db.get_setting("empresa_telefone", "(11) 98765-4321"),
             "empresa_endereco": db.get_setting("empresa_endereco", "Av. Principal, 100 — Centro"),
+            "empresa_termos": db.get_setting("empresa_termos", ""),
         }
 
     def print_entry_receipt_by_id(self, item_id: int) -> None:

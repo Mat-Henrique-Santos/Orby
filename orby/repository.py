@@ -520,33 +520,153 @@ class Repository:
     # GESTÃO DE USUÁRIOS E AUTENTICAÇÃO
     # ==========================================
     def authenticate(self, login: str, password: str) -> dict | None:
-        from .database import hash_password
-        senha_hash = hash_password(password)
+        from .database import verify_password, hash_password, is_legacy_hash
+        user_login = login.strip()
+        if not user_login or not password:
+            return None
+
         with self.database.connect() as db:
             row = db.execute(
-                "SELECT id, nome, login, perfil, ativo, criado_em FROM usuarios WHERE login = ? AND senha_hash = ? AND ativo = 1",
-                (login.strip(), senha_hash),
+                """SELECT id, nome, login, senha_hash, perfil, ativo, criado_em 
+                   FROM usuarios 
+                   WHERE login = ? COLLATE NOCASE""",
+                (user_login,),
             ).fetchone()
-        return dict(row) if row else None
+
+            if not row:
+                return None
+
+            if not row["ativo"]:
+                return None  # Usuário inativo/desativado não pode acessar
+
+            if not verify_password(password, row["senha_hash"]):
+                return None
+
+            # Migração automática e transparente de SHA-256 legado para scrypt moderno
+            if is_legacy_hash(row["senha_hash"]):
+                new_hash = hash_password(password)
+                db.execute("UPDATE usuarios SET senha_hash = ? WHERE id = ?", (new_hash, row["id"]))
+
+            return {
+                "id": row["id"],
+                "nome": row["nome"],
+                "login": row["login"],
+                "perfil": row["perfil"],
+                "ativo": row["ativo"],
+                "criado_em": row["criado_em"],
+            }
 
     def users(self) -> list[dict]:
         with self.database.connect() as db:
             rows = db.execute(
-                "SELECT id, nome, login, perfil, ativo, criado_em FROM usuarios ORDER BY nome ASC"
+                """SELECT id, nome, login, perfil, ativo, criado_em 
+                   FROM usuarios 
+                   ORDER BY ativo DESC, nome COLLATE NOCASE ASC"""
             ).fetchall()
         return [dict(r) for r in rows]
 
     def add_user(self, nome: str, login: str, password: str, perfil: str) -> int:
         from .database import hash_password
-        if not nome.strip() or not login.strip() or not password.strip():
-            raise ValueError("Nome, login e senha são obrigatórios.")
+        self._require_role("Gestor", action="cadastrar novos usuários")
+        clean_nome = nome.strip()
+        clean_login = login.strip()
+
+        if not clean_nome:
+            raise ValueError("O nome completo do usuário é obrigatório.")
+        if not clean_login:
+            raise ValueError("O login de acesso é obrigatório.")
+        if not password or len(password) < 4:
+            raise ValueError("A senha deve conter no mínimo 4 caracteres.")
         if perfil not in ("Gestor", "Técnico", "Atendente"):
             raise ValueError(f"Perfil '{perfil}' inválido.")
+
         senha_hash = hash_password(password)
         with self.database.connect() as db:
+            existing = db.execute(
+                "SELECT id FROM usuarios WHERE login = ? COLLATE NOCASE", (clean_login,)
+            ).fetchone()
+            if existing:
+                raise ValueError(f"Já existe um usuário cadastrado com o login '{clean_login}'.")
+
             cursor = db.execute(
-                "INSERT INTO usuarios (nome, login, senha_hash, perfil) VALUES (?, ?, ?, ?)",
-                (nome.strip(), login.strip(), senha_hash, perfil),
+                "INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo) VALUES (?, ?, ?, ?, 1)",
+                (clean_nome, clean_login, senha_hash, perfil),
             )
             return int(cursor.lastrowid)
 
+    def update_user(self, user_id: int, nome: str, perfil: str, login: str | None = None) -> None:
+        self._require_role("Gestor", action="editar dados de usuários")
+        clean_nome = nome.strip()
+        if not clean_nome:
+            raise ValueError("O nome completo é obrigatório.")
+        if perfil not in ("Gestor", "Técnico", "Atendente"):
+            raise ValueError(f"Perfil '{perfil}' inválido.")
+
+        with self.database.connect() as db:
+            user = db.execute("SELECT id, login, perfil, ativo FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+            if not user:
+                raise ValueError(f"Usuário #{user_id} não encontrado.")
+
+            # Proteção: Não permitir rebaixar perfil do último Gestor ativo
+            if user["perfil"] == "Gestor" and perfil != "Gestor":
+                other_gestores = db.execute(
+                    "SELECT COUNT(*) AS total FROM usuarios WHERE perfil = 'Gestor' AND ativo = 1 AND id != ?",
+                    (user_id,),
+                ).fetchone()["total"]
+                if other_gestores == 0:
+                    raise ValueError("Não é permitido alterar o perfil do único Gestor ativo no sistema.")
+
+            clean_login = login.strip() if login else user["login"]
+            if not clean_login:
+                raise ValueError("O login de acesso não pode ser vazio.")
+
+            dup = db.execute(
+                "SELECT id FROM usuarios WHERE login = ? COLLATE NOCASE AND id != ?",
+                (clean_login, user_id),
+            ).fetchone()
+            if dup:
+                raise ValueError(f"O login '{clean_login}' já está em uso por outro usuário.")
+
+            db.execute(
+                "UPDATE usuarios SET nome = ?, login = ?, perfil = ? WHERE id = ?",
+                (clean_nome, clean_login, perfil, user_id),
+            )
+
+    def change_password(self, user_id: int, new_password: str) -> None:
+        if self.current_role != "Gestor" and (not self.current_user or self.current_user.get("id") != user_id):
+            self._require_role("Gestor", action="alterar a senha deste usuário")
+
+        if not new_password or len(new_password) < 4:
+            raise ValueError("A nova senha deve ter no mínimo 4 caracteres.")
+
+        from .database import hash_password
+        senha_hash = hash_password(new_password)
+        with self.database.connect() as db:
+            cursor = db.execute(
+                "UPDATE usuarios SET senha_hash = ? WHERE id = ?",
+                (senha_hash, user_id),
+            )
+            if cursor.rowcount == 0:
+                raise ValueError(f"Usuário #{user_id} não encontrado.")
+
+    def toggle_user_status(self, user_id: int, ativo: bool) -> None:
+        self._require_role("Gestor", action="alterar status de usuário")
+        with self.database.connect() as db:
+            user = db.execute("SELECT id, login, perfil, ativo FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+            if not user:
+                raise ValueError(f"Usuário #{user_id} não encontrado.")
+
+            # Proteção: Impedir desativar o usuário atualmente conectado
+            if not ativo and self.current_user and self.current_user.get("id") == user_id:
+                raise ValueError("Você não pode desativar o seu próprio usuário logado.")
+
+            # Proteção: Impedir desativar o último Gestor ativo
+            if not ativo and user["perfil"] == "Gestor":
+                other_gestores = db.execute(
+                    "SELECT COUNT(*) AS total FROM usuarios WHERE perfil = 'Gestor' AND ativo = 1 AND id != ?",
+                    (user_id,),
+                ).fetchone()["total"]
+                if other_gestores == 0:
+                    raise ValueError("Não é permitido desativar o único Gestor ativo no sistema.")
+
+            db.execute("UPDATE usuarios SET ativo = ? WHERE id = ?", (1 if ativo else 0, user_id))

@@ -130,5 +130,124 @@ class TestAuthAndRBAC(unittest.TestCase):
             )
 
 
+
+    def test_scrypt_hashing_and_verification(self):
+        from orby.database import hash_password, verify_password, is_legacy_hash
+
+        hashed = hash_password("minhasenha_segura")
+        self.assertTrue(hashed.startswith("scrypt$"))
+        self.assertFalse(is_legacy_hash(hashed))
+
+        # Senha correta
+        self.assertTrue(verify_password("minhasenha_segura", hashed))
+        # Senha incorreta
+        self.assertFalse(verify_password("senha_errada", hashed))
+
+    def test_legacy_sha256_migration_on_login(self):
+        from orby.database import hash_password_legacy, is_legacy_hash
+
+        # Insere usuário diretamente com hash legado SHA-256
+        legacy_hash = hash_password_legacy("legado123")
+        with self.db.connect() as conn:
+            conn.execute(
+                "INSERT INTO usuarios (nome, login, senha_hash, perfil, ativo) VALUES (?, ?, ?, ?, 1)",
+                ("Usuário Legado", "legado", legacy_hash, "Técnico"),
+            )
+
+        # Verifica que o hash no banco é legado
+        with self.db.connect() as conn:
+            stored = conn.execute("SELECT senha_hash FROM usuarios WHERE login = 'legado'").fetchone()["senha_hash"]
+        self.assertTrue(is_legacy_hash(stored))
+
+        # Realiza autenticação -> deve migrar automaticamente para scrypt
+        user = self.repo.authenticate("legado", "legado123")
+        self.assertIsNotNone(user)
+        self.assertEqual(user["login"], "legado")
+
+        # Verifica se o banco agora possui o hash moderno scrypt
+        with self.db.connect() as conn:
+            updated_hash = conn.execute("SELECT senha_hash FROM usuarios WHERE login = 'legado'").fetchone()["senha_hash"]
+        self.assertFalse(is_legacy_hash(updated_hash))
+        self.assertTrue(updated_hash.startswith("scrypt$"))
+
+        # Próxima autenticação com scrypt continua funcionando perfeitamente
+        user2 = self.repo.authenticate("legado", "legado123")
+        self.assertIsNotNone(user2)
+
+    def test_update_user_info(self):
+        uid = self.repo.add_user("Renato Suporte", "renato", "renato123", "Técnico")
+        self.repo.update_user(uid, nome="Renato Silva", perfil="Gestor", login="renato.silva")
+
+        users = self.repo.users()
+        renato = next((u for u in users if u["id"] == uid), None)
+        self.assertIsNotNone(renato)
+        self.assertEqual(renato["nome"], "Renato Silva")
+        self.assertEqual(renato["login"], "renato.silva")
+        self.assertEqual(renato["perfil"], "Gestor")
+
+    def test_change_user_password(self):
+        uid = self.repo.add_user("Bruna Atendimento", "bruna", "bruna123", "Atendente")
+        
+        # Altera senha
+        self.repo.change_password(uid, "nova_senha456")
+
+        # Senha antiga não deve mais autenticar
+        self.assertIsNone(self.repo.authenticate("bruna", "bruna123"))
+
+        # Nova senha deve autenticar
+        user = self.repo.authenticate("bruna", "nova_senha456")
+        self.assertIsNotNone(user)
+        self.assertEqual(user["login"], "bruna")
+
+    def test_deactivate_user_blocks_login(self):
+        uid = self.repo.add_user("Marcos Teste", "marcos", "marcos123", "Técnico")
+        self.assertIsNotNone(self.repo.authenticate("marcos", "marcos123"))
+
+        # Desativa o usuário
+        self.repo.toggle_user_status(uid, False)
+
+        # Autenticação bloqueada
+        self.assertIsNone(self.repo.authenticate("marcos", "marcos123"))
+
+        # Reativa o usuário
+        self.repo.toggle_user_status(uid, True)
+        self.assertIsNotNone(self.repo.authenticate("marcos", "marcos123"))
+
+    def test_cannot_deactivate_self(self):
+        # Admin logado tenta desativar a própria conta
+        admin_user = self.repo.authenticate("admin", "admin123")
+        self.repo.set_current_user(admin_user)
+
+        with self.assertRaises(ValueError):
+            self.repo.toggle_user_status(admin_user["id"], False)
+
+    def test_cannot_deactivate_or_demote_last_gestor(self):
+        users = self.repo.users()
+        gestores = [u for u in users if u["perfil"] == "Gestor" and u["ativo"] == 1]
+        self.assertEqual(len(gestores), 1)
+        gestor_id = gestores[0]["id"]
+
+        # Tentar desativar o único gestor
+        self.repo.set_current_user({"id": 999, "nome": "Outro", "perfil": "Gestor"})
+        with self.assertRaises(ValueError):
+            self.repo.toggle_user_status(gestor_id, False)
+
+        # Tentar rebaixar perfil do único gestor
+        with self.assertRaises(ValueError):
+            self.repo.update_user(gestor_id, nome="Admin", perfil="Técnico")
+
+    def test_production_mode_setting(self):
+        # Modo produção padrão é false
+        self.assertEqual(self.db.get_setting("modo_producao", "false"), "false")
+
+        # Ativa modo produção
+        self.db.set_setting("modo_producao", "true")
+        self.assertEqual(self.db.get_setting("modo_producao"), "true")
+
+        # Desativa
+        self.db.set_setting("modo_producao", "false")
+        self.assertEqual(self.db.get_setting("modo_producao"), "false")
+
+
 if __name__ == "__main__":
     unittest.main()
