@@ -222,6 +222,9 @@ class Database(DatabaseBackend):
             )
             self._apply_migrations(db)
             self._seed_default_users(db)
+            db.execute(
+                "INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES ('modo_producao', 'true')"
+            )
 
     def _seed_default_users(self, db: sqlite3.Connection) -> None:
         count = db.execute("SELECT COUNT(*) AS total FROM usuarios").fetchone()["total"]

@@ -6,19 +6,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from reportlab.lib.colors import HexColor
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import cm
-from reportlab.platypus import (
-    HRFlowable,
-    KeepTogether,
-    Paragraph,
-    SimpleDocTemplate,
-    Spacer,
-    Table,
-    TableStyle,
-)
+try:
+    from reportlab.lib.colors import HexColor
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.platypus import (
+        HRFlowable,
+        KeepTogether,
+        Paragraph,
+        SimpleDocTemplate,
+        Spacer,
+        Table,
+        TableStyle,
+    )
+    _HAS_REPORTLAB = True
+except ImportError:
+    _HAS_REPORTLAB = False
+
+
+def _ensure_reportlab() -> None:
+    if not _HAS_REPORTLAB:
+        raise ImportError(
+            "A biblioteca 'reportlab' é necessária para gerar arquivos PDF. "
+            "Instale-a executando: pip install reportlab"
+        )
 
 
 def get_default_docs_dir(subfolder: str = "comprovantes") -> Path:
@@ -59,6 +71,7 @@ def formatar_data_pdf(data_str: str | None) -> str:
 
 
 def _get_styles():
+    _ensure_reportlab()
     styles = getSampleStyleSheet()
 
     # Customizações elegantes alinhadas à identidade visual do Orby
@@ -164,6 +177,7 @@ def generate_entry_receipt(
     """
     Gera o Comprovante de Entrada de Equipamento em PDF para assinatura na recepção do balcão.
     """
+    _ensure_reportlab()
     company = company or {}
     empresa_nome = company.get("empresa_nome", "Orby Assistência Técnica & Gestão")
     empresa_cnpj = company.get("empresa_cnpj", "00.000.000/0001-00")
@@ -342,6 +356,7 @@ def generate_exit_receipt(
     """
     Gera o Recibo de Saída, Laudo Técnico e Termo de Garantia em PDF após a conclusão da OS.
     """
+    _ensure_reportlab()
     company = company or {}
     empresa_nome = company.get("empresa_nome", "Orby Assistência Técnica & Gestão")
     empresa_cnpj = company.get("empresa_cnpj", "00.000.000/0001-00")
@@ -516,6 +531,7 @@ def generate_financial_report(
     """
     Gera o Relatório Financeiro e Extrato de Fechamento de Caixa em PDF.
     """
+    _ensure_reportlab()
     company = company or {}
     empresa_nome = company.get("empresa_nome", "Orby Assistência Técnica & Gestão")
     empresa_cnpj = company.get("empresa_cnpj", "00.000.000/0001-00")

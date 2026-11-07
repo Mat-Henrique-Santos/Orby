@@ -809,26 +809,24 @@ class MainWindow(QMainWindow):
         scroll.setWidget(widget)
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         # Desativa autoFillBackground que causava fundo preto em sistemas com Windows Dark Mode
         scroll.setAutoFillBackground(False)
-        scroll.setAttribute(Qt.WA_TranslucentBackground, True)
+        widget.setAutoFillBackground(False)
         if scroll.viewport():
+            scroll.viewport().setObjectName("qt_scrollarea_viewport")
             scroll.viewport().setAutoFillBackground(False)
-            scroll.viewport().setAttribute(Qt.WA_TranslucentBackground, True)
-            scroll.viewport().setStyleSheet("background: transparent; border: none;")
 
         scroll.setStyleSheet(
             "QScrollArea#PageScrollArea, "
-            "QScrollArea#PageScrollArea > QWidget#qt_scrollarea_viewport, "
+            "QWidget#qt_scrollarea_viewport, "
             "QWidget#PageScrollContent { "
             "   background: transparent; "
             "   border: none; "
             "}"
         )
-        widget.setStyleSheet("background: transparent;")
         return scroll
 
     def update_theme_button_icon(self) -> None:
@@ -992,10 +990,10 @@ class MainWindow(QMainWindow):
         # Painel de Filtro e Título Financeiro
         header_card = ContentCard()
         h_layout = QHBoxLayout(header_card)
-        h_layout.setContentsMargins(SPACING.LG + 2, SPACING.MD, SPACING.LG + 2, SPACING.MD)
-        h_layout.setSpacing(SPACING.MD)
+        h_layout.setContentsMargins(SPACING.MD + 2, SPACING.SM + 2, SPACING.MD + 2, SPACING.SM + 2)
+        h_layout.setSpacing(SPACING.SM + 2)
 
-        title = QLabel("Painel Financeiro e Fechamento de Caixa")
+        title = QLabel("Painel Financeiro e Caixa")
         title.setObjectName("SectionSubtitle")
         h_layout.addWidget(title)
         h_layout.addStretch()
@@ -1019,7 +1017,7 @@ class MainWindow(QMainWindow):
         btn_export_pdf.clicked.connect(self.export_finance_pdf)
         h_layout.addWidget(btn_export_pdf)
 
-        btn_export_csv = QPushButton("Exportar Excel (CSV)")
+        btn_export_csv = QPushButton("Exportar CSV")
         btn_export_csv.setIcon(get_icon("clipboard", size=ICON_SIZES.SM))
         btn_export_csv.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_export_csv.setToolTip("Exportar extrato analítico para planilha Excel (.csv)")
@@ -1030,12 +1028,12 @@ class MainWindow(QMainWindow):
 
         # Cartões de Métricas Financeiras com Ícones Lucide SVG
         cards_layout = QHBoxLayout()
-        cards_layout.setSpacing(SPACING.MD + 2)
+        cards_layout.setSpacing(SPACING.SM + 2)
 
         self.card_fat_realizado = MetricCard("Faturamento Realizado", "R$ 0,00", "dollar-sign")
-        self.card_rec_prevista = MetricCard("Receita Prevista (Aberto)", "R$ 0,00", "trending-up")
-        self.card_ticket_medio = MetricCard("Ticket Médio por OS", "R$ 0,00", "tag")
-        self.card_lucro_servicos = MetricCard("Mão de Obra (Serviços)", "R$ 0,00", "wrench")
+        self.card_rec_prevista = MetricCard("Receita Prevista", "R$ 0,00", "trending-up")
+        self.card_ticket_medio = MetricCard("Ticket Médio / OS", "R$ 0,00", "tag")
+        self.card_lucro_servicos = MetricCard("Mão de Obra", "R$ 0,00", "wrench")
 
         cards_layout.addWidget(self.card_fat_realizado)
         cards_layout.addWidget(self.card_rec_prevista)
@@ -1045,20 +1043,20 @@ class MainWindow(QMainWindow):
 
         # Corpo Central Dividido: Formas de Pagamento (Esq) + Extrato de Fechamento (Dir)
         mid_layout = QHBoxLayout()
-        mid_layout.setSpacing(SPACING.MD + 2)
+        mid_layout.setSpacing(SPACING.SM + 2)
 
         # Quadro Formas de Pagamento
         pay_card = ContentCard()
-        pay_card.setMinimumWidth(250)
-        pay_card.setMaximumWidth(320)
+        pay_card.setMinimumWidth(200)
+        pay_card.setMaximumWidth(250)
         pay_layout = QVBoxLayout(pay_card)
-        pay_layout.setContentsMargins(SPACING.LG, SPACING.MD + 2, SPACING.LG, SPACING.MD + 2)
-        pay_layout.setSpacing(SPACING.SM + 2)
+        pay_layout.setContentsMargins(SPACING.MD, SPACING.MD, SPACING.MD, SPACING.MD)
+        pay_layout.setSpacing(SPACING.SM)
 
         pay_header = QHBoxLayout()
-        pay_header.setSpacing(SPACING.SM)
+        pay_header.setSpacing(SPACING.XS + 2)
         pay_icon = IconWidget("credit-card", size=ICON_SIZES.MD)
-        pay_title = QLabel("Por Forma de Pagamento")
+        pay_title = QLabel("Formas de Pagamento")
         pay_title.setObjectName("SectionSubtitle")
         pay_header.addWidget(pay_icon)
         pay_header.addWidget(pay_title)
@@ -1076,13 +1074,13 @@ class MainWindow(QMainWindow):
         # Quadro Extrato de Transações Finalizadas
         extrato_card = ContentCard()
         extrato_layout = QVBoxLayout(extrato_card)
-        extrato_layout.setContentsMargins(SPACING.LG + 2, SPACING.MD + 2, SPACING.LG + 2, SPACING.MD + 2)
-        extrato_layout.setSpacing(SPACING.SM + 2)
+        extrato_layout.setContentsMargins(SPACING.MD, SPACING.MD, SPACING.MD, SPACING.MD)
+        extrato_layout.setSpacing(SPACING.SM)
 
         ext_header = QHBoxLayout()
         ext_header.setSpacing(SPACING.SM)
         ext_icon = IconWidget("clipboard", size=ICON_SIZES.MD)
-        ext_title = QLabel("Extrato de Ordens Finalizadas (Receita Realizada)")
+        ext_title = QLabel("Extrato de Ordens Finalizadas")
         ext_title.setObjectName("SectionSubtitle")
         ext_header.addWidget(ext_icon)
         ext_header.addWidget(ext_title)
@@ -1090,7 +1088,7 @@ class MainWindow(QMainWindow):
         extrato_layout.addLayout(ext_header)
 
         self.extrato_table = ModernTableWidget(0, 7)
-        self.extrato_table.setHorizontalHeaderLabels(["OS", "Cliente", "Equipamento", "Serviço", "Peças", "Total", "Pagamento"])
+        self.extrato_table.setHorizontalHeaderLabels(["OS", "Cliente", "Equipamento", "Serviço", "Peças", "Total", "Pagto"])
         self.extrato_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.extrato_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.extrato_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -1280,34 +1278,38 @@ class MainWindow(QMainWindow):
         card_layout.addWidget(self.order_table)
 
         actions = QHBoxLayout()
-        edit_btn = QPushButton("Editar OS")
+        actions.setSpacing(SPACING.SM)
+        edit_btn = QPushButton("Editar")
         edit_btn.setIcon(get_icon("pencil", size=ICON_SIZES.SM))
         edit_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        edit_btn.setToolTip("Editar dados e status da Ordem de Serviço selecionada")
         edit_btn.clicked.connect(self.edit_order)
 
-        timeline_btn = QPushButton("Linha do Tempo / Histórico")
+        timeline_btn = QPushButton("Linha do Tempo")
         timeline_btn.setIcon(get_icon("clock", size=ICON_SIZES.SM))
         timeline_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        timeline_btn.setToolTip("Ver linha do tempo e histórico de auditoria da OS")
         timeline_btn.clicked.connect(self.show_timeline)
 
-        self.delete_order_btn = QPushButton("Excluir OS")
+        self.delete_order_btn = QPushButton("Excluir")
         self.delete_order_btn.setIcon(get_icon("trash", size=ICON_SIZES.SM))
         self.delete_order_btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
+        self.delete_order_btn.setToolTip("Excluir Ordem de Serviço selecionada")
         self.delete_order_btn.clicked.connect(self.delete_order)
 
-        btn_print_entry = QPushButton("Comprovante de Entrada")
+        btn_print_entry = QPushButton("Comprovante")
         btn_print_entry.setIcon(get_icon("file-up", size=ICON_SIZES.SM))
         btn_print_entry.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_print_entry.setToolTip("Emitir comprovante de entrada para assinatura do cliente")
         btn_print_entry.clicked.connect(self.print_entry_receipt)
 
-        btn_print_exit = QPushButton("Recibo / Laudo de Saída")
+        btn_print_exit = QPushButton("Recibo / Laudo")
         btn_print_exit.setIcon(get_icon("circle-check", size=ICON_SIZES.SM))
         btn_print_exit.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_print_exit.setToolTip("Emitir recibo de saída, laudo técnico e termo de garantia")
         btn_print_exit.clicked.connect(self.print_exit_receipt)
 
-        btn_order_history = QPushButton("Histórico do Aparelho")
+        btn_order_history = QPushButton("Histórico")
         btn_order_history.setIcon(get_icon("laptop", size=ICON_SIZES.SM))
         btn_order_history.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_order_history.setToolTip("Ver manutenções anteriores do mesmo equipamento")
@@ -1373,7 +1375,7 @@ class MainWindow(QMainWindow):
                 days_delayed=item.get("dias_parada", 0),
             )
             self.dash_table.setCellWidget(row, 3, badge)
-            valor_texto = "Restrito" if self.perfil == "Técnico" else formatar_moeda(item["valor"])
+            valor_texto = "Restrito" if self.perfil in ("Técnico", "Atendente") else formatar_moeda(item["valor"])
             self.dash_table.setItem(row, 4, QTableWidgetItem(valor_texto))
             self.dash_table.setItem(row, 5, QTableWidgetItem(item["data_abertura"][:10]))
 
@@ -1451,7 +1453,7 @@ class MainWindow(QMainWindow):
             )
             self.order_table.setCellWidget(row, 4, badge)
 
-            if self.perfil == "Técnico":
+            if self.perfil in ("Técnico", "Atendente"):
                 self.order_table.setItem(row, 5, QTableWidgetItem("Restrito"))
                 self.order_table.setItem(row, 6, QTableWidgetItem("Restrito"))
                 self.order_table.setItem(row, 7, QTableWidgetItem("Restrito"))
@@ -1724,35 +1726,34 @@ class MainWindow(QMainWindow):
         # Cabeçalho da Seção com Sub-abas de Navegação
         header_card = ContentCard()
         h_layout = QHBoxLayout(header_card)
-        h_layout.setContentsMargins(SPACING.LG + 2, SPACING.MD, SPACING.LG + 2, SPACING.MD)
-        h_layout.setSpacing(SPACING.MD)
+        h_layout.setContentsMargins(SPACING.MD + 2, SPACING.SM + 2, SPACING.MD + 2, SPACING.SM + 2)
+        h_layout.setSpacing(SPACING.SM + 2)
 
         title_box = QVBoxLayout()
         title_box.setSpacing(SPACING.XXS)
-        title = QLabel("Painel Administrativo & Configurações")
-        title.setObjectName("SectionTitle")
-        subtitle = QLabel("Gestão de Segurança, Cópias de Backup, Usuários (RBAC) e Dados Comerciais")
+        title = QLabel("Configurações")
+        title.setObjectName("SectionSubtitle")
+        subtitle = QLabel("Backup, Usuários (RBAC) e Empresa")
         subtitle.setObjectName("SummaryLabel")
+        subtitle.setWordWrap(True)
         title_box.addWidget(title)
         title_box.addWidget(subtitle)
-        h_layout.addLayout(title_box)
-        h_layout.addStretch()
+        h_layout.addLayout(title_box, 1)
 
-        # Botões de alternância de sub-aba
+        # Botões de alternância de sub-aba (&& escapa o caractere & no Qt)
         self.settings_tab_buttons = []
         tabs_info = [
-            ("Backup & Banco", "database", 0),
-            ("Usuários & Acessos", "users", 1),
-            ("Dados da Empresa", "settings", 2),
+            ("Backup && Banco", "database", 0),
+            ("Usuários && Acessos", "users", 1),
+            ("Empresa", "settings", 2),
         ]
         for label, icon_name, idx in tabs_info:
-            btn = QPushButton(f"  {label}")
+            btn = QPushButton(f" {label}")
             btn.setIcon(get_icon(icon_name, size=ICON_SIZES.SM))
             btn.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
             btn.setCheckable(True)
             btn.setChecked(idx == 0)
-            if idx == 0:
-                btn.setObjectName("PrimaryButton")
+            btn.setObjectName("PrimaryButton" if idx == 0 else "SecondaryButton")
             btn.clicked.connect(lambda checked=False, i=idx: self.switch_settings_tab(i))
             h_layout.addWidget(btn)
             self.settings_tab_buttons.append(btn)
@@ -1793,23 +1794,26 @@ class MainWindow(QMainWindow):
         # 1. Status do Banco de Dados
         db_card = ContentCard()
         db_layout = QVBoxLayout(db_card)
-        db_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
-        db_layout.setSpacing(SPACING.SM + 2)
+        db_layout.setContentsMargins(SPACING.LG, SPACING.MD, SPACING.LG, SPACING.MD)
+        db_layout.setSpacing(SPACING.XS + 2)
 
         db_title = QLabel("Status do Banco de Dados Local (SQLite)")
         db_title.setObjectName("SectionSubtitle")
         db_layout.addWidget(db_title)
 
         self.lbl_db_path = QLabel("Localização: %APPDATA%/Orby/orby.db")
+        self.lbl_db_path.setWordWrap(True)
         self.lbl_db_path.setStyleSheet("font-family: Consolas, monospace; color: #0284c7; font-weight: bold;")
         db_layout.addWidget(self.lbl_db_path)
 
         self.lbl_db_stats = QLabel("Tamanho: Calculando... • Última Modificação: Calculando...")
         self.lbl_db_stats.setObjectName("SummaryLabel")
+        self.lbl_db_stats.setWordWrap(True)
         db_layout.addWidget(self.lbl_db_stats)
 
         self.lbl_db_counts = QLabel("Clientes: 0 • Equipamentos: 0 • Ordens de Serviço: 0 • Usuários: 0")
         self.lbl_db_counts.setObjectName("SummaryLabel")
+        self.lbl_db_counts.setWordWrap(True)
         db_layout.addWidget(self.lbl_db_counts)
 
         layout.addWidget(db_card)
@@ -1817,36 +1821,36 @@ class MainWindow(QMainWindow):
         # 2. Ações de Backup
         action_card = ContentCard()
         action_layout = QVBoxLayout(action_card)
-        action_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
-        action_layout.setSpacing(SPACING.MD)
+        action_layout.setContentsMargins(SPACING.LG, SPACING.MD, SPACING.LG, SPACING.MD)
+        action_layout.setSpacing(SPACING.SM + 2)
 
         act_title = QLabel("Rotinas de Backup e Proteção")
         act_title.setObjectName("SectionSubtitle")
         action_layout.addWidget(act_title)
 
         btns_layout = QHBoxLayout()
-        btns_layout.setSpacing(SPACING.MD)
+        btns_layout.setSpacing(SPACING.SM)
 
-        btn_backup_manual = QPushButton("Fazer Backup Manual (.zip / .db)")
+        btn_backup_manual = QPushButton("Backup Manual (.zip/.db)")
         btn_backup_manual.setObjectName("PrimaryButton")
         btn_backup_manual.setIcon(get_icon("file-up", color="#ffffff", size=ICON_SIZES.SM))
         btn_backup_manual.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_backup_manual.clicked.connect(self.do_manual_backup)
         btns_layout.addWidget(btn_backup_manual)
 
-        btn_backup_quick = QPushButton("Backup Rápido (1 Clique)")
+        btn_backup_quick = QPushButton("Backup Rápido")
         btn_backup_quick.setIcon(get_icon("shield", size=ICON_SIZES.SM))
         btn_backup_quick.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_backup_quick.clicked.connect(self.do_quick_backup)
         btns_layout.addWidget(btn_backup_quick)
 
-        btn_restore = QPushButton("Restaurar Cópia de Segurança...")
+        btn_restore = QPushButton("Restaurar Backup...")
         btn_restore.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
         btn_restore.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_restore.clicked.connect(lambda: self.do_restore_backup())
         btns_layout.addWidget(btn_restore)
 
-        btn_folder = QPushButton("Abrir Pasta de Backups")
+        btn_folder = QPushButton("Abrir Pasta")
         btn_folder.setIcon(get_icon("database", size=ICON_SIZES.SM))
         btn_folder.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_folder.clicked.connect(self.open_backup_folder)
@@ -1856,7 +1860,7 @@ class MainWindow(QMainWindow):
         action_layout.addLayout(btns_layout)
 
         # Checkbox Auto-backup
-        self.chk_auto_backup = QCheckBox("Criar cópia de segurança automática (.zip) na pasta padrão sempre que o sistema for fechado")
+        self.chk_auto_backup = QCheckBox("Criar backup automático (.zip) na pasta padrão ao fechar o sistema")
         auto_enabled = self.repository.database.get_setting("auto_backup_on_exit", "true").lower() == "true"
         self.chk_auto_backup.setChecked(auto_enabled)
         self.chk_auto_backup.stateChanged.connect(self.on_auto_backup_toggled)
@@ -1867,8 +1871,8 @@ class MainWindow(QMainWindow):
         # 3. Tabela de Backups
         table_card = ContentCard()
         table_layout = QVBoxLayout(table_card)
-        table_layout.setContentsMargins(SPACING.XL, SPACING.LG, SPACING.XL, SPACING.LG)
-        table_layout.setSpacing(SPACING.MD)
+        table_layout.setContentsMargins(SPACING.LG, SPACING.MD, SPACING.LG, SPACING.MD)
+        table_layout.setSpacing(SPACING.SM + 2)
 
         th_box = QHBoxLayout()
         t_title = QLabel("Cópias de Segurança Disponíveis na Pasta Padrão")
@@ -1888,7 +1892,8 @@ class MainWindow(QMainWindow):
         self.backup_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.backup_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.backup_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.backup_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.backup_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+        self.backup_table.setColumnWidth(4, 115)
         table_layout.addWidget(self.backup_table)
 
         layout.addWidget(table_card, 1)
@@ -1913,24 +1918,24 @@ class MainWindow(QMainWindow):
         u_title.setObjectName("SectionSubtitle")
         u_sub = QLabel("Segurança com derivação de chave scrypt e salt criptográfico individual de 128 bits")
         u_sub.setObjectName("SummaryLabel")
+        u_sub.setWordWrap(True)
         u_title_box.addWidget(u_title)
         u_title_box.addWidget(u_sub)
-        top_row.addLayout(u_title_box)
-        top_row.addStretch()
+        top_row.addLayout(u_title_box, 1)
         u_layout.addLayout(top_row)
 
         # Botões de Ação
         btn_row = QHBoxLayout()
         btn_row.setSpacing(SPACING.SM)
 
-        btn_new_user = QPushButton("Novo Colaborador")
+        btn_new_user = QPushButton("Novo Usuário")
         btn_new_user.setObjectName("PrimaryButton")
         btn_new_user.setIcon(get_icon("plus", color="#ffffff", size=ICON_SIZES.SM))
         btn_new_user.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_new_user.clicked.connect(self.open_new_user_dialog)
         btn_row.addWidget(btn_new_user)
 
-        btn_edit_user = QPushButton("Editar Dados")
+        btn_edit_user = QPushButton("Editar")
         btn_edit_user.setIcon(get_icon("pencil", size=ICON_SIZES.SM))
         btn_edit_user.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_edit_user.clicked.connect(self.open_edit_user_dialog)
@@ -1942,13 +1947,13 @@ class MainWindow(QMainWindow):
         btn_change_pwd.clicked.connect(self.open_change_password_dialog)
         btn_row.addWidget(btn_change_pwd)
 
-        btn_toggle_status = QPushButton("Desativar / Reativar")
+        btn_toggle_status = QPushButton("Ativar / Desativar")
         btn_toggle_status.setIcon(get_icon("shield", size=ICON_SIZES.SM))
         btn_toggle_status.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_toggle_status.clicked.connect(self.toggle_user_status_action)
         btn_row.addWidget(btn_toggle_status)
 
-        btn_refresh_u = QPushButton("Atualizar Lista")
+        btn_refresh_u = QPushButton("Atualizar")
         btn_refresh_u.setIcon(get_icon("refresh-cw", size=ICON_SIZES.SM))
         btn_refresh_u.setIconSize(QSize(ICON_SIZES.SM, ICON_SIZES.SM))
         btn_refresh_u.clicked.connect(self.refresh_users)
@@ -1959,9 +1964,9 @@ class MainWindow(QMainWindow):
 
         # Modo Produção
         self.chk_modo_producao = QCheckBox(
-            "Modo Produção Comercial (ocultar botões de atalho rápido na tela de login)"
+            "Modo Produção Comercial (ocultar atalhos rápidos na tela de login)"
         )
-        prod_active = self.repository.database.get_setting("modo_producao", "false").lower() == "true"
+        prod_active = self.repository.database.get_setting("modo_producao", "true").lower() == "true"
         self.chk_modo_producao.setChecked(prod_active)
         self.chk_modo_producao.stateChanged.connect(self.on_modo_producao_toggled)
         u_layout.addWidget(self.chk_modo_producao)
@@ -2014,6 +2019,7 @@ class MainWindow(QMainWindow):
             "Recibos/Laudos de Saída e Relatórios Financeiros emitidos em PDF."
         )
         c_desc.setObjectName("SummaryLabel")
+        c_desc.setWordWrap(True)
         card_layout.addWidget(c_desc)
 
         form_layout = QGridLayout()
@@ -2419,21 +2425,21 @@ class MainWindow(QMainWindow):
         equipment = self.repository.single_equipment(order["equipamento_id"]) if order.get("equipamento_id") else None
         company = self.get_company_info()
 
-        from .core.pdf_generator import generate_entry_receipt, get_default_docs_dir
-
-        default_name = f"Comprovante_Entrada_OS_{item_id:04d}.pdf"
-        default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            f"Salvar Comprovante de Entrada — OS-{item_id:04d}",
-            default_path,
-            "Documento PDF (*.pdf)",
-        )
-        if not path:
-            return
-
         try:
+            from .core.pdf_generator import generate_entry_receipt, get_default_docs_dir
+
+            default_name = f"Comprovante_Entrada_OS_{item_id:04d}.pdf"
+            default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
+
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Salvar Comprovante de Entrada — OS-{item_id:04d}",
+                default_path,
+                "Documento PDF (*.pdf)",
+            )
+            if not path:
+                return
+
             saved_path = generate_entry_receipt(order, customer, equipment, company, output_path=path)
             reply = QMessageBox.information(
                 self,
@@ -2444,6 +2450,12 @@ class MainWindow(QMainWindow):
             )
             if reply == QMessageBox.Yes:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved_path)))
+        except ImportError as e:
+            QMessageBox.critical(
+                self,
+                "Dependência Ausente",
+                f"Não foi possível gerar o PDF pois a biblioteca 'reportlab' não está instalada.\n\nDetalhe: {e}",
+            )
         except Exception as e:
             QMessageBox.critical(self, "Erro na Emissão", f"Falha ao gerar comprovante em PDF:\n{e}")
 
@@ -2462,21 +2474,21 @@ class MainWindow(QMainWindow):
         equipment = self.repository.single_equipment(order["equipamento_id"]) if order.get("equipamento_id") else None
         company = self.get_company_info()
 
-        from .core.pdf_generator import generate_exit_receipt, get_default_docs_dir
-
-        default_name = f"Recibo_Saida_Laudo_OS_{item_id:04d}.pdf"
-        default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            f"Salvar Recibo de Saída e Laudo — OS-{item_id:04d}",
-            default_path,
-            "Documento PDF (*.pdf)",
-        )
-        if not path:
-            return
-
         try:
+            from .core.pdf_generator import generate_exit_receipt, get_default_docs_dir
+
+            default_name = f"Recibo_Saida_Laudo_OS_{item_id:04d}.pdf"
+            default_path = os.path.join(str(get_default_docs_dir("comprovantes")), default_name)
+
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                f"Salvar Recibo de Saída e Laudo — OS-{item_id:04d}",
+                default_path,
+                "Documento PDF (*.pdf)",
+            )
+            if not path:
+                return
+
             saved_path = generate_exit_receipt(order, customer, equipment, company, output_path=path)
             reply = QMessageBox.information(
                 self,
@@ -2487,6 +2499,12 @@ class MainWindow(QMainWindow):
             )
             if reply == QMessageBox.Yes:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved_path)))
+        except ImportError as e:
+            QMessageBox.critical(
+                self,
+                "Dependência Ausente",
+                f"Não foi possível gerar o PDF pois a biblioteca 'reportlab' não está instalada.\n\nDetalhe: {e}",
+            )
         except Exception as e:
             QMessageBox.critical(self, "Erro na Emissão", f"Falha ao gerar recibo de saída em PDF:\n{e}")
 
@@ -2499,26 +2517,26 @@ class MainWindow(QMainWindow):
     def export_finance_pdf(self) -> None:
         period = self.finance_period.currentData() or "all"
         period_text = self.finance_period.currentText()
-        data = self.repository.finance(period)
+        data = self.repository.financial_dashboard(period)
         company = self.get_company_info()
 
-        from .core.pdf_generator import generate_financial_report, get_default_docs_dir
-        from datetime import datetime
-
-        ts = datetime.now().strftime("%Y-%m-%d")
-        default_name = f"Relatorio_Financeiro_{period}_{ts}.pdf"
-        default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Exportar Relatório Financeiro (PDF)",
-            default_path,
-            "Documento PDF (*.pdf)",
-        )
-        if not path:
-            return
-
         try:
+            from .core.pdf_generator import generate_financial_report, get_default_docs_dir
+            from datetime import datetime
+
+            ts = datetime.now().strftime("%Y-%m-%d")
+            default_name = f"Relatorio_Financeiro_{period}_{ts}.pdf"
+            default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
+
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Exportar Relatório Financeiro (PDF)",
+                default_path,
+                "Documento PDF (*.pdf)",
+            )
+            if not path:
+                return
+
             saved = generate_financial_report(data, period_label=period_text, company=company, output_path=path)
             reply = QMessageBox.information(
                 self,
@@ -2529,36 +2547,42 @@ class MainWindow(QMainWindow):
             )
             if reply == QMessageBox.Yes:
                 QDesktopServices.openUrl(QUrl.fromLocalFile(str(saved)))
+        except ImportError as e:
+            QMessageBox.critical(
+                self,
+                "Dependência Ausente",
+                f"Não foi possível gerar o PDF pois a biblioteca 'reportlab' não está instalada.\n\nDetalhe: {e}",
+            )
         except Exception as e:
             QMessageBox.critical(self, "Erro na Exportação", f"Falha ao gerar relatório financeiro:\n{e}")
 
     def export_finance_csv(self) -> None:
         period = self.finance_period.currentData() or "all"
         period_text = self.finance_period.currentText()
-        data = self.repository.finance(period)
+        data = self.repository.financial_dashboard(period)
         extrato = data.get("extrato", [])
 
         if not extrato:
             QMessageBox.information(self, "Extrato Vazio", f"Não há lançamentos de ordens finalizadas para o período '{period_text}'.")
             return
 
-        from .core.pdf_generator import export_financial_csv, get_default_docs_dir
-        from datetime import datetime
-
-        ts = datetime.now().strftime("%Y-%m-%d")
-        default_name = f"Extrato_Financeiro_{period}_{ts}.csv"
-        default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
-
-        path, _ = QFileDialog.getSaveFileName(
-            self,
-            "Exportar Extrato Analítico (Excel / CSV)",
-            default_path,
-            "Planilha CSV (*.csv)",
-        )
-        if not path:
-            return
-
         try:
+            from .core.pdf_generator import export_financial_csv, get_default_docs_dir
+            from datetime import datetime
+
+            ts = datetime.now().strftime("%Y-%m-%d")
+            default_name = f"Extrato_Financeiro_{period}_{ts}.csv"
+            default_path = os.path.join(str(get_default_docs_dir("relatorios")), default_name)
+
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Exportar Extrato Analítico (Excel / CSV)",
+                default_path,
+                "Planilha CSV (*.csv)",
+            )
+            if not path:
+                return
+
             saved = export_financial_csv(extrato, output_path=path)
             reply = QMessageBox.information(
                 self,

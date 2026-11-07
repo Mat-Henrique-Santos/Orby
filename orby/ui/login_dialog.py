@@ -26,7 +26,7 @@ class LoginDialog(QDialog):
         self,
         repository: Repository,
         parent: QWidget | None = None,
-        production_mode: bool = False,
+        production_mode: bool = True,
     ) -> None:
         super().__init__(parent)
         self.repository = repository

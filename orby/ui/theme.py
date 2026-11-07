@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QFont, QPalette
+from pathlib import Path
+import tempfile
+from PySide6.QtCore import QPointF, Qt
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPalette, QPen
 from PySide6.QtWidgets import QApplication
 
 from .tokens import (
@@ -17,6 +20,42 @@ from .tokens import (
 THEME_STATE = {"dark_mode": False}
 
 
+def _ensure_arrow_icons(color_hex: str) -> tuple[str, str]:
+    """Gera ícones PNG nítidos de setas (chevron up/down) para QComboBox e QDoubleSpinBox."""
+    safe_hex = color_hex.lstrip("#").replace("(", "").replace(")", "").replace(",", "_").replace(" ", "")
+    assets_dir = Path(tempfile.gettempdir()) / "orby_ui_assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    down_path = assets_dir / f"arrow_down_{safe_hex}.png"
+    up_path = assets_dir / f"arrow_up_{safe_hex}.png"
+
+    if not down_path.exists():
+        img = QImage(14, 14, QImage.Format_ARGB32)
+        img.fill(Qt.transparent)
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(QColor(color_hex), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(3.0, 5.0), QPointF(7.0, 9.0))
+        painter.drawLine(QPointF(7.0, 9.0), QPointF(11.0, 5.0))
+        painter.end()
+        img.save(str(down_path), "PNG")
+
+    if not up_path.exists():
+        img = QImage(14, 14, QImage.Format_ARGB32)
+        img.fill(Qt.transparent)
+        painter = QPainter(img)
+        painter.setRenderHint(QPainter.Antialiasing)
+        pen = QPen(QColor(color_hex), 2.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.drawLine(QPointF(3.0, 9.0), QPointF(7.0, 5.0))
+        painter.drawLine(QPointF(7.0, 5.0), QPointF(11.0, 9.0))
+        painter.end()
+        img.save(str(up_path), "PNG")
+
+    return down_path.as_posix(), up_path.as_posix()
+
+
 def get_current_palette() -> ColorPalette:
     return DARK_PALETTE if THEME_STATE.get("dark_mode", False) else LIGHT_PALETTE
 
@@ -28,6 +67,7 @@ def is_dark_mode() -> bool:
 def generate_qss(c: ColorPalette) -> str:
     """Gera o StyleSheet QSS completo dinamicamente a partir dos tokens do Design System."""
     is_dark = THEME_STATE.get("dark_mode", False)
+    down_arrow_url, up_arrow_url = _ensure_arrow_icons(c.TEXT_PRIMARY)
     sidebar_bg = (
         f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 rgba(15, 23, 42, 0.90), stop:1.0 rgba(10, 18, 35, 0.95))"
         if is_dark
@@ -224,6 +264,7 @@ QPushButton:pressed {{
 
 /* --- Botão Primário Destacado --- */
 QPushButton#PrimaryButton {{
+    background-color: {c.PRIMARY};
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 #38bdf8,
@@ -235,10 +276,11 @@ QPushButton#PrimaryButton {{
     border-radius: {RADIUS.SM + 2}px;
     color: #ffffff;
     font-weight: {TYPOGRAPHY.WEIGHT_BOLD};
-    padding: {SPACING.SM - 2}px {SPACING.LG}px;
+    padding: {SPACING.SM - 2}px {SPACING.MD + 2}px;
 }}
 
 QPushButton#PrimaryButton:hover {{
+    background-color: {c.PRIMARY_HOVER};
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 #7dd3fc,
@@ -247,6 +289,22 @@ QPushButton#PrimaryButton:hover {{
         stop:1.0 {c.PRIMARY_ACTIVE}
     );
     border: 1px solid {c.PRIMARY_ACTIVE};
+    color: #ffffff;
+}}
+
+QPushButton#SecondaryButton {{
+    background: {c.SURFACE_ELEVATED};
+    border: 1px solid {c.BORDER};
+    border-radius: {RADIUS.SM + 2}px;
+    color: {c.TEXT_PRIMARY};
+    font-weight: {TYPOGRAPHY.WEIGHT_BOLD};
+    padding: {SPACING.SM - 2}px {SPACING.MD}px;
+}}
+
+QPushButton#SecondaryButton:hover {{
+    background: {c.SURFACE_HOVER};
+    border: 1px solid {c.PRIMARY};
+    color: {c.PRIMARY};
 }}
 
 /* --- Botões de Mini Dock --- */
@@ -313,12 +371,9 @@ QComboBox::drop-down {{
 }}
 
 QComboBox::down-arrow {{
-    width: 0px;
-    height: 0px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid {c.TEXT_PRIMARY};
-    margin: auto;
+    image: url("{down_arrow_url}");
+    width: 12px;
+    height: 12px;
 }}
 
 QComboBox QAbstractItemView {{
@@ -352,12 +407,9 @@ QDoubleSpinBox::up-button:hover, QSpinBox::up-button:hover {{
 }}
 
 QDoubleSpinBox::up-arrow, QSpinBox::up-arrow {{
-    width: 0px;
-    height: 0px;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 5px solid {c.TEXT_PRIMARY};
-    margin: auto;
+    image: url("{up_arrow_url}");
+    width: 10px;
+    height: 10px;
 }}
 
 QDoubleSpinBox::down-button, QSpinBox::down-button {{
@@ -375,12 +427,9 @@ QDoubleSpinBox::down-button:hover, QSpinBox::down-button:hover {{
 }}
 
 QDoubleSpinBox::down-arrow, QSpinBox::down-arrow {{
-    width: 0px;
-    height: 0px;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid {c.TEXT_PRIMARY};
-    margin: auto;
+    image: url("{down_arrow_url}");
+    width: 10px;
+    height: 10px;
 }}
 
 /* --- Tabelas de Alta Densidade e Legibilidade --- */

@@ -15,7 +15,7 @@ class TestRepository(unittest.TestCase):
         self.temp_file.close()
         self.db = Database(self.db_path)
         self.db.initialize()
-        self.repo = Repository(self.db)
+        self.repo = Repository(self.db, current_user={"id": 1, "nome": "Administrador", "perfil": "Gestor"})
 
     def tearDown(self):
         del self.repo

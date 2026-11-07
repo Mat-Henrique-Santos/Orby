@@ -20,15 +20,16 @@ class Repository:
         self.current_user = current_user
 
     @property
-    def current_role(self) -> str:
+    def current_role(self) -> str | None:
         if not self.current_user:
-            return "Gestor"  # Default permissivo para testes sem usuário explícito
-        return self.current_user.get("perfil", "Gestor")
+            return None
+        return self.current_user.get("perfil")
 
     def _require_role(self, *allowed_roles: str, action: str = "esta operação") -> None:
-        if self.current_role not in allowed_roles:
+        if not self.current_role or self.current_role not in allowed_roles:
+            role_label = self.current_role or "Sem usuário autenticado"
             raise PermissionDeniedError(
-                f"Acesso negado: Perfil '{self.current_role}' não tem permissão para {action}."
+                f"Acesso negado: Perfil '{role_label}' não tem permissão para {action}."
             )
 
     # --- CLIENTES ---
@@ -558,6 +559,10 @@ class Repository:
                 "formas_pagamento": [dict(f) for f in formas],
                 "extrato": [dict(e) for e in extrato_rows],
             }
+
+    def finance(self, period: str = "all") -> dict:
+        """Alias compatível para financial_dashboard."""
+        return self.financial_dashboard(period)
 
     # ==========================================
     # GESTÃO DE USUÁRIOS E AUTENTICAÇÃO

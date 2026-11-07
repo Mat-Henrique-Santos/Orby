@@ -155,7 +155,10 @@ class EquipmentHistoryDialog(QDialog):
             self.table.setItem(row, 4, item_diag)
 
             # Valor
-            valor_fmt = format_currency(order.get("valor", 0.0))
+            perfil = getattr(self.parent(), "perfil", None) or getattr(
+                getattr(self.parent(), "parent_window", None), "perfil", "Gestor"
+            )
+            valor_fmt = "Restrito" if perfil in ("Técnico", "Atendente") else format_currency(order.get("valor", 0.0))
             item_val = QTableWidgetItem(valor_fmt)
             item_val.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.table.setItem(row, 5, item_val)

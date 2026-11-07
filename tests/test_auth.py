@@ -13,7 +13,7 @@ class TestAuthAndRBAC(unittest.TestCase):
         self.temp_file.close()
         self.db = Database(self.temp_file.name)
         self.db.initialize()
-        self.repo = Repository(self.db)
+        self.repo = Repository(self.db, current_user={"id": 1, "nome": "Administrador", "perfil": "Gestor"})
 
     def tearDown(self):
         try:
@@ -237,16 +237,28 @@ class TestAuthAndRBAC(unittest.TestCase):
             self.repo.update_user(gestor_id, nome="Admin", perfil="Técnico")
 
     def test_production_mode_setting(self):
-        # Modo produção padrão é false
-        self.assertEqual(self.db.get_setting("modo_producao", "false"), "false")
+        # Modo produção padrão é true na versão final
+        self.assertEqual(self.db.get_setting("modo_producao", "true"), "true")
 
-        # Ativa modo produção
+        # Desativa modo produção
+        self.db.set_setting("modo_producao", "false")
+        self.assertEqual(self.db.get_setting("modo_producao"), "false")
+
+        # Reativa
         self.db.set_setting("modo_producao", "true")
         self.assertEqual(self.db.get_setting("modo_producao"), "true")
 
-        # Desativa
-        self.db.set_setting("modo_producao", "false")
-        self.assertEqual(self.db.get_setting("modo_producao"), "false")
+    def test_unauthenticated_repository_denies_protected_operations(self):
+        from orby.repository import PermissionDeniedError
+        cust_id = self.repo.add_customer("Cliente Protegido", "11999990000")
+        unauth_repo = Repository(self.db)  # Sem current_user (current_role is None)
+        self.assertIsNone(unauth_repo.current_role)
+        with self.assertRaises(PermissionDeniedError):
+            unauth_repo.delete_customer(cust_id)
+        with self.assertRaises(PermissionDeniedError):
+            unauth_repo.delete_order(1)
+        with self.assertRaises(PermissionDeniedError):
+            unauth_repo.add_user("Teste", "teste_unauth", "1234", "Técnico")
 
 
 if __name__ == "__main__":

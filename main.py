@@ -19,9 +19,9 @@ def main() -> int:
     database.initialize()
     repository = Repository(database)
 
-    # Ciclo de Autenticação e Sessão (com suporte a Logout e Modo Produção)
+    # Ciclo de Autenticação e Sessão (com suporte a Logout e Modo Produção ativo por padrão)
     while True:
-        prod_mode = database.get_setting("modo_producao", "false").lower() == "true"
+        prod_mode = database.get_setting("modo_producao", "true").lower() == "true"
         login_dialog = LoginDialog(repository, production_mode=prod_mode)
         if not login_dialog.exec():
             # Usuário fechou ou cancelou a tela de login

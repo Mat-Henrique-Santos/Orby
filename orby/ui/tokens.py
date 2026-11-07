@@ -315,10 +315,10 @@ class DimensionTokens:
     BUTTON_SMALL_HEIGHT: int = 28
     NAV_BUTTON_HEIGHT: int = 40
     DOCK_TILE_SIZE: int = 38
-    SIDEBAR_WIDTH: int = 248
-    LOGO_SIZE: int = 54
-    METRIC_CARD_MIN_HEIGHT: int = 96
-    METRIC_CARD_MIN_WIDTH: int = 145
+    SIDEBAR_WIDTH: int = 216
+    LOGO_SIZE: int = 50
+    METRIC_CARD_MIN_HEIGHT: int = 90
+    METRIC_CARD_MIN_WIDTH: int = 112
     TABLE_ROW_HEIGHT: int = 36
     TABLE_HEADER_HEIGHT: int = 38
     STATUS_BADGE_HEIGHT: int = 26
